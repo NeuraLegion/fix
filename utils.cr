@@ -4,14 +4,10 @@ module Utils
     data.each_byte do |c|
       checksum += c
     end
-    checksum %= 256
-    return checksum
+    checksum % 256
   end
 
-  def self.encode(data)
-    puts "zs"
-    return data.map do |key, value|
-      item = "#{key.value}=#{value}\x01"
-    end.join
+  def self.encode_time(time : Time)
+    time.to_s("%Y%m%d-%H:%M:%S.%L")
   end
 end

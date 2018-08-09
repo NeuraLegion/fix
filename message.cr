@@ -1,8 +1,8 @@
 class FIXMessage
-  getter :msgType
+  getter msgType
+  property data = {} of Int32 => String | Array(Hash(Int32, String))
 
   def initialize(@msgType : String)
-    @data = {} of Tags => String | Array(Hash(Int32, String))
   end
 
   def setField(key, value)

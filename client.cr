@@ -4,37 +4,41 @@ require "./utils"
 require "./message"
 
 class FIXClient
-  def initialize(@proto : FIXProtocol, host : String, port : Int)
+  def initialize(host : String, port : Int)
     @client = TCPSocket.new(host, port)
     @seqNum = 0
-    sendMsg @proto.logon
+    sendMsg FIXProtocol.logon
     @lastSent = Time.now
   end
 
   def disconnect
-    sendMsg @proto.logout
+    sendMsg FIXProtocol.logout
     @client.close
   end
 
   def loop
     if Time.now - @lastSent > 30.seconds
-        @client << @proto.heartbeat
+      @client << FIXProtocol.heartbeat
     end
   end
 
   def sendMsg(msg : FIXMessage)
+    msg.data.merge({Tags::SenderCompID => "CLIENT",
+                     Tags::TargetCompID => "SERVER",
+                     Tags::MsgSeqNum    => @seqNum,
+                     Tags::SendingTime  => Utils.encode_date(Time.utc_now)}) # add required fields
+    msg.deleteField Tags::BeginString
+    msg.deleteField Tags::BodyLength
+    msg.deleteField Tags::Checksum
+
     encoded_body = msg.to_s
 
-    header = {Tags::BeginString  => @proto.name,
+    header = {Tags::BeginString  => FIXProtocol::NAME,
               Tags::BodyLength   => encoded_body.size + 4 + msg.msgType.size,
-              Tags::MsgType      => msg.msgType,
-              Tags::SenderCompID => "CLIENT",
-              Tags::TargetCompID => "SERVER",
-              Tags::MsgSeqNum    => @seqNum,
-              Tags::SendingTime  => Time.utc_now.to_s("%Y%m%d-%H:%M:%S.%L")}
+              Tags::MsgType      => msg.msgType}
 
     encoded_msg = "#{Utils.encode(header)}#{encoded_body}"
-    encoded_msg = "#{encoded_msg}#{Tags::CheckSum.value}=%03d" % Utils.calculate_checksum(encoded_msg)
+    encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d" % Utils.calculate_checksum(encoded_msg)
     puts encoded_msg
     @client << encoded_msg
     @lastSent = Time.now

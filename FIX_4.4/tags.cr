@@ -1,4 +1,4 @@
-enum Tags
+module Tags
   Account                              =   1
   AdvId                                =   2
   AdvRefID                             =   3
