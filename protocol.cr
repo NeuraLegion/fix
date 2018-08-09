@@ -1,5 +1,6 @@
 require "./FIX_4.4/tags"
 require "./FIX_4.4/message_types"
+require "./message"
 
 # abstract class FIXProtocol
 #    @MessageTypes : Hash(String, String)
@@ -21,10 +22,27 @@ module FIXProtocol # implements FIX 4.4
     end.join
   end
 
-  def self.logon
+  def self.decode(data : String) : FIXMessage?
+    # cant handle groups
+    decoded = {} of Int32 => String| Array(Hash(Int32, String))
+    data.split("\x01")[0...-1].each do |field|
+      k, v = field.split("=")
+      decoded[k.to_i]= v
+    end
+    # validate message
+    checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
+    length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
+    puts decoded
+    if decoded[Tags::CheckSum] == checksum && decoded[Tags::BodyLength] == length && !decoded[Tags::MsgType].nil?
+        msgtype = decoded.delete Tags::MsgType
+        FIXMessage.new msgtype.as(String), decoded
+    end
+  end
+
+  def self.logon(heartbeat = 30)
     msg = FIXMessage.new MessageTypes::LOGON
     msg.setField(Tags::EncryptMethod, "0")
-    msg.setField(Tags::HeartBtInt, "30")
+    msg.setField(Tags::HeartBtInt, heartbeat.to_s)
     msg
   end
 

@@ -2,9 +2,9 @@ require "./protocol"
 
 class FIXMessage
   getter msgType
-  property data = {} of Int32 => String | Array(Hash(Int32, String))
+  property data
 
-  def initialize(@msgType : String)
+  def initialize(@msgType : String, @data = {} of Int32 => String | Array(Hash(Int32, String)))
   end
 
   def setField(key, value)
@@ -19,11 +19,19 @@ class FIXMessage
     end
   end
 
+  def setGroup(groupKey, groups : Array)
+    @data[groupKey] = groups
+  end
+
+  def deleteGroup(groupKey)
+    @data.delete groupKey
+  end
+
   def deleteField(key)
-    @data.delete(key)
+    @data.delete key
   end
 
   def to_s
-    return FIXProtocol.encode(@data)
+    FIXProtocol.encode(@data)
   end
 end
