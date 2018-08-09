@@ -109,6 +109,7 @@ class FIXClient
     bytes = Slice(UInt8).new(4096)
     @client.read bytes
     raw = String.new(bytes[0, bytes.index(0).not_nil!])
+    puts raw
     if !raw.nil?
       msg = FIXProtocol.decode raw
       if !msg.nil?
@@ -136,7 +137,8 @@ class FIXClient
               Tags::MsgType     => msg.msgType}
 
     encoded_msg = "#{FIXProtocol.encode(header)}#{encoded_body}"
-    encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d\n" % Utils.calculate_checksum(encoded_msg)
+    encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d\x01" % Utils.calculate_checksum(encoded_msg)
+    puts encoded_msg.gsub "\x01", "|"
     # puts encoded_msg
     @client.send encoded_msg
     puts "SENT #{msg.data}"
