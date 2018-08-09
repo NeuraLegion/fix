@@ -109,7 +109,6 @@ class FIXClient
     bytes = Slice(UInt8).new(4096)
     @client.read bytes
     raw = String.new(bytes[0, bytes.index(0).not_nil!])
-    puts raw
     if !raw.nil?
       msg = FIXProtocol.decode raw
       if !msg.nil?
