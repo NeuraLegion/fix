@@ -1,3 +1,5 @@
+require "./protocol"
+
 class FIXMessage
   getter msgType
   property data = {} of Int32 => String | Array(Hash(Int32, String))
@@ -17,11 +19,11 @@ class FIXMessage
     end
   end
 
-  def deleteField(key : Tags)
+  def deleteField(key)
     @data.delete(key)
   end
 
   def to_s
-    return Utils.encode(@data)
+    return FIXProtocol.encode(@data)
   end
 end

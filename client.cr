@@ -26,10 +26,10 @@ class FIXClient
     msg.data.merge({Tags::SenderCompID => "CLIENT",
                      Tags::TargetCompID => "SERVER",
                      Tags::MsgSeqNum    => @seqNum,
-                     Tags::SendingTime  => Utils.encode_date(Time.utc_now)}) # add required fields
+                     Tags::SendingTime  => Utils.encode_time(Time.utc_now)}) # add required fields
     msg.deleteField Tags::BeginString
     msg.deleteField Tags::BodyLength
-    msg.deleteField Tags::Checksum
+    msg.deleteField Tags::CheckSum
 
     encoded_body = msg.to_s
 
@@ -37,7 +37,7 @@ class FIXClient
               Tags::BodyLength   => encoded_body.size + 4 + msg.msgType.size,
               Tags::MsgType      => msg.msgType}
 
-    encoded_msg = "#{Utils.encode(header)}#{encoded_body}"
+    encoded_msg = "#{FIXProtocol.encode(header)}#{encoded_body}"
     encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d" % Utils.calculate_checksum(encoded_msg)
     puts encoded_msg
     @client << encoded_msg
