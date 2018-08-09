@@ -32,10 +32,9 @@ module FIXProtocol # implements FIX 4.4
     # validate message
     checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
     length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
-    puts decoded
-    if decoded[Tags::CheckSum] == checksum && decoded[Tags::BodyLength] == length && !decoded[Tags::MsgType].nil?
-        msgtype = decoded.delete Tags::MsgType
-        FIXMessage.new msgtype.as(String), decoded
+    if decoded[Tags::CheckSum] == "%03d" % checksum && decoded[Tags::BodyLength] == length.to_s && decoded.has_key? Tags::MsgType
+        msgtype = decoded.delete(Tags::MsgType).as(String)
+        FIXMessage.new msgtype, decoded
     end
   end
 

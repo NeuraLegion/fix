@@ -9,7 +9,7 @@ class FIXClient
     @inSeqNum = 1
     @outSeqNum = 1
 
-    #puts @client.gets
+    # puts @client.gets
     @lastSent = Time.now
   end
 
@@ -47,7 +47,6 @@ class FIXClient
       # if Time.now - @lastSent > @heartbeat.seconds
       #  @client << FIXProtocol.heartbeat
       # end
-      
 
       sleep 5.seconds
     end
@@ -57,11 +56,10 @@ class FIXClient
     bytes = Slice(UInt8).new(4096)
     @client.read bytes
     raw = String.new(bytes[0, bytes.index(0).not_nil!])
-    puts "BEGIN#{raw}END"
-    if raw
+    if !raw.nil?
       msg = FIXProtocol.decode raw
-      if msg && msg.data.includes? Tags::SenderCompID && msg.data.includes? Tags::TargetCompID && msg.data[Tags::MsgSeqNum]? == @inSeqNum && msg.data[Tags::SendingTime].as(String) < Utils.encode_time(Time.utc_now)
-        puts msg
+      if !msg.nil?
+        puts "RECEIVED #{msg.data}"
         @inSeqNum += 1
       end
     end
@@ -69,13 +67,13 @@ class FIXClient
 
   def sendMsg(msg : FIXMessage)
     msg.data.merge!({Tags::SenderCompID => "CLIENT",
-                    Tags::TargetCompID => "SERVER",
-                    Tags::MsgSeqNum    => @outSeqNum.to_s,
-                    Tags::SendingTime  => Utils.encode_time(Time.utc_now)}) # add required fields
+                     Tags::TargetCompID => "SERVER",
+                     Tags::MsgSeqNum    => @outSeqNum.to_s,
+                     Tags::SendingTime  => Utils.encode_time(Time.utc_now)}) # add required fields
     msg.deleteField Tags::BeginString
     msg.deleteField Tags::BodyLength
     msg.deleteField Tags::CheckSum
-    
+
     encoded_body = msg.to_s
 
     header = {Tags::BeginString => FIXProtocol::NAME,
@@ -84,8 +82,9 @@ class FIXClient
 
     encoded_msg = "#{FIXProtocol.encode(header)}#{encoded_body}"
     encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d\n" % Utils.calculate_checksum(encoded_msg)
-    #puts encoded_msg
+    # puts encoded_msg
     @client.send encoded_msg
+    puts "SENT #{msg.data}"
     @lastSent = Time.now
     @outSeqNum += 1
   end
