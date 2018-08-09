@@ -18,7 +18,7 @@ class FIXClient
   @messages = {} of Int32 => String
   @state = ConnectionState::STARTED
 
-  def initialize(@hbInt = 30)
+  def initialize(@hbInt = 5)
     @client = TCPSocket.new
   end
 
@@ -26,20 +26,25 @@ class FIXClient
     if @state == ConnectionState::STARTED
       @client.connect host, port
       sendMsg FIXProtocol.logon @hbInt
+      @state = ConnectionState::CONNECTED
     end
   end
 
   def disconnect
     if @state == ConnectionState::CONNECTED
       @client.close
+      @state = ConnectionState::DISCONNECTED
     end
   end
 
   def loop
+    puts "loop"
     r = Random.new
     cl0rdid = r.rand(1000..10000)
     while @state == ConnectionState::CONNECTED
+      puts "loop"
       if received = recvMsg
+        puts received
         case received.msgType
         when MessageTypes::HEARTBEAT
           if !@testID.nil? && received.data[Tags::TestReqID] != @testID
@@ -50,8 +55,7 @@ class FIXClient
           sendMsg FIXProtocol.logout
           disconnect
         when MessageTypes::TESTREQUEST
-          hbeat = FIXProtocol.heartbeat
-          hbeat.setField(Tags::TestReqID, received.data[Tags::TestReqID])
+          sendMsg FIXProtocol.heartbeat received.data[Tags::TestReqID]
         when MessageTypes::RESENDREQUEST
         when MessageTypes::REJECT
           raise received.data[Tags::Text].to_s
@@ -66,33 +70,36 @@ class FIXClient
           end
         end
       end
-      msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
-      msg.setField Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
-      msg.setField Tags::OrderQty, r.rand(100).to_s
-      msg.setField Tags::Symbol, "VOD.L"
-      msg.setField Tags::SecurityID, "GB00BH4HKS39"
-      msg.setField Tags::SecurityIDSource, "4"
-      msg.setField Tags::Account, "TEST"
-      msg.setField Tags::HandlInst, "1"
-      msg.setField Tags::ExDestination, "XLON"
-      msg.setField Tags::Side, r.rand(1..2).to_s
-      msg.setField Tags::ClOrdID, cl0rdid.to_s
-      cl0rdid += 1
-      msg.setField Tags::Currency, "GBP"
-      sendMsg msg
-
+      puts "passed msg check"
       if Time.now - @lastRecv > @hbInt.seconds
         if @testID.nil?
           @testID = r.rand(1000...10000).to_s
-          @client << FIXProtocol.test_request @testID
+          sendMsg FIXProtocol.test_request @testID
         else
           disconnect
         end
       end
-
+      puts "passed hbeat check"
       if Time.now - @lastSent > @hbInt.seconds
-        @client << FIXProtocol.heartbeat @hbInt
+        sendMsg FIXProtocol.heartbeat
       end
+      puts "ping hbeat"
+      # # test message
+      # msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
+      # msg.setField Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
+      # msg.setField Tags::OrderQty, r.rand(100).to_s
+      # msg.setField Tags::Symbol, "VOD.L"
+      # msg.setField Tags::SecurityID, "GB00BH4HKS39"
+      # msg.setField Tags::SecurityIDSource, "4"
+      # msg.setField Tags::Account, "TEST"
+      # msg.setField Tags::HandlInst, "1"
+      # msg.setField Tags::ExDestination, "XLON"
+      # msg.setField Tags::Side, r.rand(1..2).to_s
+      # msg.setField Tags::ClOrdID, cl0rdid.to_s
+      # cl0rdid += 1
+      # msg.setField Tags::Currency, "GBP"
+      # sendMsg msg
+      ###
 
       sleep 5.seconds
     end

@@ -1,0 +1,9 @@
+name: fix_cr
+version: 0.1.0
+
+authors:
+  - Dekel <dekel1.reches.gmail.com>
+
+crystal: 0.25.1
+
+license: MIT
