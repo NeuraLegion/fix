@@ -8,7 +8,7 @@ class FIXMessage
   end
 
   def setField(key, value)
-    @data[key] = value
+    @data[key] = value.to_s
   end
 
   def addToGroup(groupKey, values)

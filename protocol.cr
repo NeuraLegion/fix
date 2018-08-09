@@ -18,23 +18,32 @@ module FIXProtocol # implements FIX 4.4
 
   def self.encode(data)
     data.map do |key, value|
-      item = "#{key}=#{value}\x01"
+      if value.is_a?(String)
+        "#{key}=#{value}\x01"
+      else
+        groups = value.map do |group|
+          group.map do |k, v|
+            item = "#{k}=#{v}\x01"
+          end.join
+        end.join
+        "#{key}=#{value.size}\x01#{groups}"
+      end
     end.join
   end
 
   def self.decode(data : String) : FIXMessage?
     # cant handle groups
-    decoded = {} of Int32 => String| Array(Hash(Int32, String))
+    decoded = {} of Int32 => String | Array(Hash(Int32, String))
     data.split("\x01")[0...-1].each do |field|
       k, v = field.split("=")
-      decoded[k.to_i]= v
+      decoded[k.to_i] = v
     end
     # validate message
     checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
     length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
     if decoded[Tags::CheckSum] == "%03d" % checksum && decoded[Tags::BodyLength] == length.to_s && decoded.has_key? Tags::MsgType
-        msgtype = decoded.delete(Tags::MsgType).as(String)
-        FIXMessage.new msgtype, decoded
+      msgtype = decoded.delete(Tags::MsgType).as(String)
+      FIXMessage.new msgtype, decoded
     end
   end
 
@@ -53,11 +62,19 @@ module FIXProtocol # implements FIX 4.4
     FIXMessage.new(MessageTypes::HEARTBEAT)
   end
 
-  def self.test_request
-    FIXMessage.new(MessageTypes::TESTREQUEST)
+  def self.heartbeat(testID)
+    msg = FIXMessage.new(MessageTypes::HEARTBEAT)
+    msg.setField(Tags::TestReqID, testID)
+    msg
   end
 
-  def self.sequence_reset(respondingTo : Hash(Int32, String), isGapFill : Bool)
+  def self.test_request(testID)
+    msg = FIXMessage.new(MessageTypes::TESTREQUEST)
+    msg.setField(Tags::TestReqID, testID)
+    msg
+  end
+
+  def self.sequence_reset(isGapFill = false)
     msg = FIXMessage.new(MessageTypes::SEQUENCERESET)
     msg.setField(fixtags.GapFillFlag, isGapFill ? "Y" : "N")
     msg.setField(fixtags.MsgSeqNum, respondingTo[Tags::BeginSeqNo])

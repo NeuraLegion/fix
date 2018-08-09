@@ -3,44 +3,67 @@ require "./protocol"
 require "./utils"
 require "./message"
 
-class FIXClient
-  def initialize(@heartbeat = 30)
-    @client = TCPSocket.new
-    @inSeqNum = 1
-    @outSeqNum = 1
+enum ConnectionState
+  STARTED,
+  CONNECTED,
+  DISCONNECTED
+end
 
-    # puts @client.gets
-    @lastSent = Time.now
+class FIXClient
+  @testID : String?
+  @inSeqNum : Int32 = 1
+  @outSeqNum : Int32 = 1
+  @lastSent = Time.now
+  @lastRecv = Time.now
+  @messages = {} of Int32 => String
+  @state = ConnectionState::STARTED
+
+  def initialize(@hbInt = 30)
+    @client = TCPSocket.new
   end
 
   def connect(host : String, port : Int)
-    @client.connect host, port
-    sendMsg FIXProtocol.logon @heartbeat
+    if @state == ConnectionState::STARTED
+      @client.connect host, port
+      sendMsg FIXProtocol.logon @hbInt
+    end
   end
 
   def disconnect
-    sendMsg FIXProtocol.logout
-    @client.close
+    if @state == ConnectionState::CONNECTED
+      @client.close
+    end
   end
 
   def loop
     r = Random.new
     cl0rdid = r.rand(1000..10000)
-    loop do
+    while @state == ConnectionState::CONNECTED
       if received = recvMsg
         case received.msgType
-          when MessageTypes::HEARTBEAT
-          when MessageTypes::LOGOUT
-            sendMsg FIXProtocol.logout
-          when MessageTypes::TESTREQUEST
-            hbeat = FIXProtocol.heartbeat
-            hbeat.setField(Tags::TestReqID, received.data[Tags::TestReqID])
-          when MessageTypes::RESENDREQUEST
-          when MessageTypes::REJECT
-            raise received[Tags::Text]
-          when MessageTypes::SEQUENCERESET
-            @inSeqNum = 1
-            @outSeqNum = 1
+        when MessageTypes::HEARTBEAT
+          if !@testID.nil? && received.data[Tags::TestReqID] != @testID
+            disconnect
+          end
+          @testId = Nil
+        when MessageTypes::LOGOUT
+          sendMsg FIXProtocol.logout
+          disconnect
+        when MessageTypes::TESTREQUEST
+          hbeat = FIXProtocol.heartbeat
+          hbeat.setField(Tags::TestReqID, received.data[Tags::TestReqID])
+        when MessageTypes::RESENDREQUEST
+        when MessageTypes::REJECT
+          raise received.data[Tags::Text].to_s
+        when MessageTypes::SEQUENCERESET
+          if received.data[Tags::GapFillFlag]? == "Y"
+          elsif received.data.has_key? Tags::NewSeqNo
+            if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
+              disconnect
+            else
+              @inSeqNum = received.data[Tags::NewSeqNo].as(String).to_i
+            end
+          end
         end
       end
       msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
@@ -58,12 +81,17 @@ class FIXClient
       msg.setField Tags::Currency, "GBP"
       sendMsg msg
 
-      if Time.now - @lastRecv > @heartbeat.seconds
-        @client << FIXProtocol.test_request
+      if Time.now - @lastRecv > @hbInt.seconds
+        if @testID.nil?
+          @testID = r.rand(1000...10000).to_s
+          @client << FIXProtocol.test_request @testID
+        else
+          disconnect
+        end
       end
 
-      if Time.now - @lastSent > @heartbeat.seconds
-        @client << FIXProtocol.heartbeat
+      if Time.now - @lastSent > @hbInt.seconds
+        @client << FIXProtocol.heartbeat @hbInt
       end
 
       sleep 5.seconds
@@ -105,6 +133,7 @@ class FIXClient
     # puts encoded_msg
     @client.send encoded_msg
     puts "SENT #{msg.data}"
+    @messages[@outSeqNum] = encoded_msg
     @lastSent = Time.now
     @outSeqNum += 1
   end
