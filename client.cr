@@ -27,8 +27,22 @@ class FIXClient
     r = Random.new
     cl0rdid = r.rand(1000..10000)
     loop do
-      recvMsg
-
+      if received = recvMsg
+        case received.msgType
+          when MessageTypes::HEARTBEAT
+          when MessageTypes::LOGOUT
+            sendMsg FIXProtocol.logout
+          when MessageTypes::TESTREQUEST
+            hbeat = FIXProtocol.heartbeat
+            hbeat.setField(Tags::TestReqID, received.data[Tags::TestReqID])
+          when MessageTypes::RESENDREQUEST
+          when MessageTypes::REJECT
+            raise received[Tags::Text]
+          when MessageTypes::SEQUENCERESET
+            @inSeqNum = 1
+            @outSeqNum = 1
+        end
+      end
       msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
       msg.setField Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
       msg.setField Tags::OrderQty, r.rand(100).to_s
@@ -44,9 +58,13 @@ class FIXClient
       msg.setField Tags::Currency, "GBP"
       sendMsg msg
 
-      # if Time.now - @lastSent > @heartbeat.seconds
-      #  @client << FIXProtocol.heartbeat
-      # end
+      if Time.now - @lastRecv > @heartbeat.seconds
+        @client << FIXProtocol.test_request
+      end
+
+      if Time.now - @lastSent > @heartbeat.seconds
+        @client << FIXProtocol.heartbeat
+      end
 
       sleep 5.seconds
     end
@@ -60,7 +78,9 @@ class FIXClient
       msg = FIXProtocol.decode raw
       if !msg.nil?
         puts "RECEIVED #{msg.data}"
+        @lastRecv = Time.now
         @inSeqNum += 1
+        msg
       end
     end
   end

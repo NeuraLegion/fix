@@ -46,26 +46,26 @@ module FIXProtocol # implements FIX 4.4
   end
 
   def self.logout
-    FIXMessage(MessageTypes::LOGOUT)
+    FIXMessage.new(MessageTypes::LOGOUT)
   end
 
   def self.heartbeat
-    FIXMessage(MessageTypes::HEARTBEAT)
+    FIXMessage.new(MessageTypes::HEARTBEAT)
   end
 
   def self.test_request
-    FIXMessage(MessageTypes::TESTREQUEST)
+    FIXMessage.new(MessageTypes::TESTREQUEST)
   end
 
   def self.sequence_reset(respondingTo : Hash(Int32, String), isGapFill : Bool)
-    msg = FIXMessage(MessageTypes::SEQUENCERESET)
+    msg = FIXMessage.new(MessageTypes::SEQUENCERESET)
     msg.setField(fixtags.GapFillFlag, isGapFill ? "Y" : "N")
     msg.setField(fixtags.MsgSeqNum, respondingTo[Tags::BeginSeqNo])
     msg
   end
 
   def self.resend_request(beginSeqNo : Int32, endSeqNo : Int32 = 0)
-    msg = FIXMessage(MessageTypes::RESENDREQUEST)
+    msg = FIXMessage.new(MessageTypes::RESENDREQUEST)
     msg.setField(fixtags.BeginSeqNo, beginSeqNo)
     msg.setField(fixtags.EndSeqNo, endSeqNo)
     msg
