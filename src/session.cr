@@ -2,6 +2,8 @@ require "socket"
 require "./protocol"
 require "./utils"
 require "./message"
+require "./exception"
+require "./app"
 
 # Helper enum for FIXSession to represent its state
 enum ConnectionState
@@ -23,7 +25,7 @@ class FIXSession
   @state = ConnectionState::STARTED
 
   # Initializes a FIXSession with heartbeat interval of `hbInt`
-  def initialize(@hbInt = 5)
+  def initialize(@app : FIXApplication, @hbInt = 5)
     @client = TCPSocket.new
   end
 
@@ -33,6 +35,7 @@ class FIXSession
       @client.connect host, port
       self << FIXProtocol.logon @hbInt
       @state = ConnectionState::CONNECTED
+      @app.on_logon
     end
   end
 
@@ -40,18 +43,19 @@ class FIXSession
     if @state == ConnectionState::CONNECTED
       @client.close
       @state = ConnectionState::DISCONNECTED
+      @app.on_logout
     end
   end
 
   # Handles and maintains the FIX session
   def loop
-    puts "loop"
+    # puts "loop"
     r = Random.new
     cl0rdid = r.rand(1000..10000)
     while @state == ConnectionState::CONNECTED
-      puts "loop"
+      # puts "loop"
       if received = recv_msg
-        puts received
+        # puts received
         case received.msgType
         when MessageTypes::HEARTBEAT
           disconnect if @testID && received.data[Tags::TestReqID] != @testID
@@ -63,7 +67,7 @@ class FIXSession
           self << FIXProtocol.heartbeat received.data[Tags::TestReqID]
         when MessageTypes::RESENDREQUEST
         when MessageTypes::REJECT
-          raise received.data[Tags::Text].to_s
+          @app.on_error SessionRejectException.new(SessionRejectReason.new(received.data[Tags::SessionRejectReason].as(String).to_i), received.data[Tags::Text].as(String))
         when MessageTypes::SEQUENCERESET
           if received.data[Tags::GapFillFlag]? == "Y"
           elsif received.data.has_key? Tags::NewSeqNo
@@ -75,8 +79,9 @@ class FIXSession
           end
         end
       end
-      puts "passed msg check"
-      if Time.now - @lastRecv > @hbInt.seconds
+
+      # target inactivity
+      if Time.now - @lastRecv > (@hbInt + 5).seconds
         if @testID.nil?
           @testID = r.rand(1000...10000).to_s
           self << FIXProtocol.test_request @testID
@@ -84,13 +89,14 @@ class FIXSession
           disconnect
         end
       end
-      puts "passed hbeat check"
+
+      # send heartbeats
       if Time.now - @lastSent > @hbInt.seconds
         self << FIXProtocol.heartbeat
       end
-      puts "ping hbeat"
+      # puts "ping hbeat"
 
-      sleep 5.seconds
+      sleep 1.seconds
     end
   end
 
@@ -102,18 +108,35 @@ class FIXSession
     @client.read bytes
     raw = String.new(bytes[0, bytes.index(0).not_nil!])
     if raw
-      msg = FIXProtocol.decode raw
-      if msg
-        case msg[Tags::MsgSeqNum] <=> @inSeqNum
-        when 0 # Equal
-          puts "RECEIVED #{msg.data}"
-          @lastRecv = Time.now
-          @inSeqNum += 1
-          msg
-        when -1 then disconnect # Smaller
-        when 1                  # Bigger
-          raise "Not implemented"
+      begin
+        msg = FIXProtocol.decode raw
+        if msg
+          case msg.data[Tags::MsgSeqNum].as(String).to_i <=> @inSeqNum
+          when 0 # Equal
+            # puts "RECEIVED #{msg.data}"
+            if [MessageTypes::HEARTBEAT,
+                MessageTypes::LOGOUT,
+                MessageTypes::LOGON,
+                MessageTypes::TESTREQUEST,
+                MessageTypes::RESENDREQUEST,
+                MessageTypes::REJECT,
+                MessageTypes::SEQUENCERESET].includes? msg.msgType
+              @app.from_admin msg
+            else
+              @app.from_app msg
+            end
+            @lastRecv = Time.now
+            @inSeqNum += 1
+            msg
+          when -1 # Smaller
+            @app.on_error InvalidSeqNum.new
+            disconnect
+          when 1 # Bigger
+            raise "Not implemented"
+          end
         end
+      rescue ex : DecodeException
+        @app.on_error(ex)
       end
     end
   end
@@ -131,15 +154,32 @@ class FIXSession
     encoded_body = msg.to_s
 
     header = {Tags::BeginString => FIXProtocol::NAME,
-              Tags::BodyLength  => encoded_body.size + 4 + msg.msgType.size,
+              Tags::BodyLength  => (encoded_body.size + 4 + msg.msgType.size).to_s,
               Tags::MsgType     => msg.msgType}
 
     encoded_msg = "#{FIXProtocol.encode(header)}#{encoded_body}"
     encoded_msg = "#{encoded_msg}#{Tags::CheckSum}=%03d\x01" % Utils.calculate_checksum(encoded_msg)
-    puts encoded_msg.gsub "\x01", "|"
+    # puts encoded_msg.gsub "\x01", "|"
     # puts encoded_msg
+
+    begin
+      if [MessageTypes::HEARTBEAT,
+          MessageTypes::LOGOUT,
+          MessageTypes::LOGON,
+          MessageTypes::TESTREQUEST,
+          MessageTypes::RESENDREQUEST,
+          MessageTypes::REJECT,
+          MessageTypes::SEQUENCERESET].includes? msg.msgType
+        @app.to_admin msg
+      else
+        @app.to_app msg
+      end
+    rescue ex : DoNotSend
+      return
+    end
+
     @client.send encoded_msg
-    puts "SENT #{msg.data}"
+    # puts "SENT #{msg.data}"
     @messages[@outSeqNum] = encoded_msg
     @lastSent = Time.now
     @outSeqNum += 1

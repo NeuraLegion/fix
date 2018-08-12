@@ -24,6 +24,9 @@ end
 class FIXException < Exception
 end
 
+class DoNotSend < Exception
+end
+
 class SessionRejectException < FIXException
   getter code : SessionRejectReason
 
@@ -32,10 +35,19 @@ class SessionRejectException < FIXException
   end
 end
 
+class InvalidSeqNum < FIXException # too small
+  def initialize(msg = "Incoming sequence number too small")
+  end
+end
+
 class DecodeException < FIXException
   getter code : DecodeFailureReason
 
   def initialize(@code = DecodeFailureReason::INVALID_FORMAT, msg : String = "Decoding failed.")
     super msg
+  end
+
+  def to_s(io)
+    io << "Code: " << @code << " Msg: " << @message
   end
 end

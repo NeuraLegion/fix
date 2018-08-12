@@ -1,4 +1,5 @@
 require "./message"
+require "./exception"
 
 abstract class FIXApplication
   abstract def on_logon
@@ -7,5 +8,5 @@ abstract class FIXApplication
   abstract def to_app(msg : FIXMessage)
   abstract def from_admin(msg : FIXMessage)
   abstract def from_app(msg : FIXMessage)
-  abstract def on_error(err : FIXError)
+  abstract def on_error(err : FIXException)
 end

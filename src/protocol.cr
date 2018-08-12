@@ -1,6 +1,7 @@
 require "./FIX_4.4/tags"
 require "./FIX_4.4/message_types"
 require "./message"
+require "./exception"
 
 # abstract class FIXProtocol
 #    @MessageTypes : Hash(String, String)
@@ -52,33 +53,38 @@ module FIXProtocol
   # ```
   # TODO: Add repeating groups decoding
   def decode(data : String) : FIXMessage
-    # cant handle groups
     decoded = {} of Int32 => String | Array(Hash(Int32, String))
-    data.split("\x01")[0...-1].each do |field|
-      k, v = field.split("=")
-      decoded[k.to_i] = v
+    begin
+      data.split("\x01")[0...-1].each do |field|
+        k, v = field.split("=")
+        decoded[k.to_i] = v
+      end
+    rescue ex
+      raise DecodeException.new DecodeFailureReason::INVALID_FORMAT, data
     end
+
     # validate message
     # contains required fields
-    if ([Tags::CheckSum,
-         Tags::BeginString,
-         Tags::BodyLength,
-         Tags::SenderCompID,
-         Tags::TargetCompID,
-         Tags::MsgSeqNum,
-         Tags::SendingTime,
-         Tags::MsgType] - decoded.keys).empty?
-      checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
-      length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
-      puts decoded[Tags::CheckSum] == "%03d" % checksum
-      puts decoded[Tags::BodyLength] == length.to_s
-      # checksum and length matches
-      if decoded[Tags::CheckSum] == "%03d" % checksum && decoded[Tags::BodyLength] == length.to_s
-        msgtype = decoded.delete(Tags::MsgType).as(String)
-        return FIXMessage.new msgtype, decoded
-      end
-    end
-    raise "Invalid Message"
+    raise DecodeException.new DecodeFailureReason::REQUIRED_FIELD_MISSING, data unless ([Tags::CheckSum,
+                                                                                         Tags::BeginString,
+                                                                                         Tags::BodyLength,
+                                                                                         Tags::SenderCompID,
+                                                                                         Tags::TargetCompID,
+                                                                                         Tags::MsgSeqNum,
+                                                                                         Tags::SendingTime,
+                                                                                         Tags::MsgType] - decoded.keys).empty?
+
+    # correct checksum
+    checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
+    raise DecodeException.new DecodeFailureReason::INVALID_CHECKSUM, data unless decoded[Tags::CheckSum] == "%03d" % checksum
+
+    # correct body length
+    length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
+    raise DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH, data unless decoded[Tags::BodyLength] == length.to_s
+
+    # create message
+    msgtype = decoded.delete(Tags::MsgType).as(String)
+    return FIXMessage.new msgtype, decoded
   end
 
   # Returns standard LOGON message with heartbeat interval of `hbInt` and optionally `resetSeq` flag
