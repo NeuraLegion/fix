@@ -58,23 +58,21 @@ class FIXSession
         # puts received
         case received.msgType
         when MessageTypes::LOGON
-          @app.on_logon
+          @app.on_logon self
         when MessageTypes::HEARTBEAT
-          disconnect if @testID && (!received.data.includes? Tags::TestReqID || received.data[Tags::TestReqID] != @testID)
+          disconnect if @testID && (!received.data.has_key? Tags::TestReqID || received.data[Tags::TestReqID] != @testID)
           @testId = Nil
         when MessageTypes::LOGOUT
           send_msg FIXProtocol.logout
           disconnect
         when MessageTypes::TESTREQUEST
-          if received.includes? Tags::TestReqID
-            send_msg FIXProtocol.heartbeat received.data[Tags::TestReqID]
-          end
+          send_msg FIXProtocol.heartbeat received.data[Tags::TestReqID]?.to_s
         when MessageTypes::RESENDREQUEST
-          i = receive.data[Tags::BeginSeqNo].as(String).to_i
+          i = received.data[Tags::BeginSeqNo].as(String).to_i
           @messages.each do |k, v|
             if k >= i
               if k > i
-                send_msg sequence_reset(k, true)
+                send_msg FIXProtocol.sequence_reset(k, true)
                 i = k
               end
               v.set_field(Tags::PossDupFlag, "Y")
@@ -85,7 +83,7 @@ class FIXSession
         when MessageTypes::REJECT
           @app.on_error SessionRejectException.new(SessionRejectReason.new(received.data[Tags::SessionRejectReason].as(String).to_i), received.data[Tags::Text].as(String))
         when MessageTypes::SEQUENCERESET
-          if received.data[Tags::GapFillFlag]? != "Y" && msg.data[Tags::MsgSeqNum].as(String).to_i != @inSeqNum
+          if received.data[Tags::GapFillFlag]? != "Y" && received.data[Tags::MsgSeqNum].as(String).to_i != @inSeqNum
             @app.on_error InvalidSeqNum.new
           elsif received.data.has_key? Tags::NewSeqNo
             if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
@@ -109,23 +107,32 @@ class FIXSession
       end
 
       # send heartbeats
-      if Time.now - @lastSent > @hbInt.seconds
+      if Time.now - @lastSent >= (@hbInt - 1).seconds
         send_msg FIXProtocol.heartbeat
       end
       # puts "ping hbeat"
 
-      sleep 1.seconds
+      sleep 5.milliseconds
     end
   end
 
   # Returns decoded incoming FIXMessage if a valid one exists in socket buffer - non blocking
-  # TODO: Read according to BodyLength
-  # TODO: Resend request in case sequence number greater than expected
   def recv_msg
-    bytes = Slice(UInt8).new(4096)
-    @client.read bytes
-    raw = String.new(bytes[0, bytes.index(0).not_nil!])
-    if raw
+    raw = ""
+    while b = @client.read_byte
+      raw += b.chr
+      if (b == 1) && (i = raw.rindex("#{Tags::BodyLength}="))
+        bytes = Slice(UInt8).new(raw[i + 1 + Tags::BodyLength.to_s.size...-1].to_i + Tags::CheckSum.to_s.size + 5)
+        if !@client.read_fully? bytes
+          @app.on_error(DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH)
+          return
+        end
+        raw += String.new(bytes)
+        break
+      end
+    end
+
+    if raw != ""
       begin
         msg = FIXProtocol.decode raw
         if msg
@@ -146,7 +153,7 @@ class FIXSession
             @inSeqNum += 1
             msg
           elsif msg.data[Tags::MsgSeqNum].as(String).to_i > @inSeqNum
-            send_msg resend_request @inSeqNum
+            send_msg FIXProtocol.resend_request @inSeqNum
           else
             @app.on_error InvalidSeqNum.new
             disconnect
@@ -159,19 +166,19 @@ class FIXSession
   end
 
   # Sends FIX message `msg` to connected server, set `validate` to `False` to send message as-is
-  def send_msg(msg : FIXMessage, validate = true)
+  def send_msg(msg : FIXMessage, validate = true) : Nil
     msg.data.merge!({Tags::SenderCompID => "CLIENT",
                      Tags::TargetCompID => "TARGET",
                      Tags::MsgSeqNum    => @outSeqNum.to_s,
                      Tags::SendingTime  => Utils.encode_time(Time.utc_now)}) if validate # add required fields
 
-    beginString = (validate || !msg.data.includes? Tags::BeginString) ? FIXProtocol::NAME : msg.data[Tags::BeginString]
+    beginString = (validate || !msg.data.has_key? Tags::BeginString) ? FIXProtocol::NAME : msg.data[Tags::BeginString]
     msg.delete_field Tags::BeginString
 
     msg.delete_field Tags::BodyLength
     msg.delete_field Tags::CheckSum
 
-    encoded_body = FIXProtocol.encode(msg)
+    encoded_body = FIXProtocol.encode(msg.data)
 
     header = {Tags::BeginString => beginString,
               Tags::BodyLength  => (encoded_body.size + 4 + msg.msgType.size).to_s,
@@ -181,7 +188,7 @@ class FIXSession
 
     checksum = "%03d" % Utils.calculate_checksum(encoded_msg)
 
-    msg.data = header.merge(msg).merge({Tags::CheckSum => checksum})
+    msg.data = header.merge(msg.data).merge({Tags::CheckSum => checksum})
     # puts encoded_msg.gsub "\x01", "|"
 
     begin

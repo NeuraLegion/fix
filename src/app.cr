@@ -3,10 +3,10 @@ require "./exception"
 
 abstract class FIXApplication
   # Called when connected to server
-  abstract def on_connct
+  abstract def on_connect
 
   # Called when succesful logon takes place
-  abstract def on_logon
+  abstract def on_logon(sess : FIXSession)
 
   # Called when session ends, either by logout or disconnection
   abstract def on_logout
