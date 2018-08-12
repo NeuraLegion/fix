@@ -35,7 +35,7 @@ class FIXSession
       @client.connect host, port
       send_msg FIXProtocol.logon @hbInt
       @state = ConnectionState::CONNECTED
-      @app.on_logon
+      @app.on_connect
     end
   end
 
@@ -57,6 +57,8 @@ class FIXSession
       if received = recv_msg
         # puts received
         case received.msgType
+        when MessageTypes::LOGON
+          @app.on_logon
         when MessageTypes::HEARTBEAT
           disconnect if @testID && (!received.data.includes? Tags::TestReqID || received.data[Tags::TestReqID] != @testID)
           @testId = Nil

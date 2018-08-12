@@ -2,6 +2,9 @@ require "./message"
 require "./exception"
 
 abstract class FIXApplication
+  # Called when connected to server
+  abstract def on_connct
+
   # Called when succesful logon takes place
   abstract def on_logon
 

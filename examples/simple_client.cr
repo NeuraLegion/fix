@@ -5,8 +5,12 @@ require "../src/exception"
 require "../src/protocol"
 
 class MyApp < FIXApplication
-  def on_logon
+  def on_connect
     puts "CONNECTED"
+  end
+
+  def on_logon
+    puts "LOGGED ON"
   end
 
   def on_logout
