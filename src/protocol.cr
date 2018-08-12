@@ -10,14 +10,24 @@ require "./message"
 #    abstract def encode(data)
 #  end
 
-module FIXProtocol # implements FIX 4.4
+# Represents a FIX protocol with all the helper functions and tag/message type values needed to communicate in it
+# Currently implements FIX 4.4
+module FIXProtocol
   include MessageTypes
   include Tags
   extend self
 
   NAME = "FIX.4.4"
 
-  def encode(data)
+  # Encodes a FIX message in `k=v\x01` format
+  # ```
+  # encode({35 => "A", 6 => "asd", 7 => "tr", 20 => [{26 => "oo", 29 => "gj"}, {26 => "53o", 29 => "g5j"}]})
+  # ```
+  # will yield
+  # ```text
+  # "35=A|6=asd|7=tr|20=2|26=oo|29=gj|26=53o|29=g5j|"
+  # ```
+  def encode(data : Hash(Int32, String | Array(Hash(Int32, String))))
     data.map do |key, value|
       if value.is_a?(Array(Hash(Int32, String)))
         groups = value.map do |group|
@@ -32,6 +42,15 @@ module FIXProtocol # implements FIX 4.4
     end.join
   end
 
+  # Decodes a FIX message encoded in `k=v\x01` format to a FIXMessage object
+  # ```
+  # decode("35=A|6=asd|7=tr|20=2")
+  # ```
+  # will yield
+  # ```text
+  # FIXMessage(msgType="A", data={6=>"asd", 7=>"tr", 20=>"2"})
+  # ```
+  # TODO: Add repeating groups decoding
   def decode(data : String) : FIXMessage
     # cant handle groups
     decoded = {} of Int32 => String | Array(Hash(Int32, String))
@@ -53,6 +72,7 @@ module FIXProtocol # implements FIX 4.4
       length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
       puts decoded[Tags::CheckSum] == "%03d" % checksum
       puts decoded[Tags::BodyLength] == length.to_s
+      # checksum and length matches
       if decoded[Tags::CheckSum] == "%03d" % checksum && decoded[Tags::BodyLength] == length.to_s
         msgtype = decoded.delete(Tags::MsgType).as(String)
         return FIXMessage.new msgtype, decoded
@@ -61,45 +81,52 @@ module FIXProtocol # implements FIX 4.4
     raise "Invalid Message"
   end
 
-  def logon(heartbeat = 30, resetSeq = true)
+  # Returns standard LOGON message with heartbeat interval of `hbInt` and optionally `resetSeq` flag
+  def logon(hbInt = 30, resetSeq = true)
     msg = FIXMessage.new MessageTypes::LOGON
-    msg.setField(Tags::EncryptMethod, "0")
-    msg.setField(Tags::ResetSeqNumFlag, resetSeq ? "Y" : "N")
-    msg.setField(Tags::HeartBtInt, heartbeat.to_s)
+    msg.set_field(Tags::EncryptMethod, "0")
+    msg.set_field(Tags::ResetSeqNumFlag, resetSeq ? "Y" : "N")
+    msg.set_field(Tags::HeartBtInt, hbInt.to_s)
     msg
   end
 
+  # Returns standard LOGOUT message
   def logout
     FIXMessage.new(MessageTypes::LOGOUT)
   end
 
+  # Returns standard HEARTBEAT message
   def heartbeat
     FIXMessage.new(MessageTypes::HEARTBEAT)
   end
 
+  # Returns standard HEARTBEAT response to a TEST_REQUEST message with TestReqID of `testID`
   def heartbeat(testID)
     msg = FIXMessage.new(MessageTypes::HEARTBEAT)
-    msg.setField(Tags::TestReqID, testID)
+    msg.set_field(Tags::TestReqID, testID)
     msg
   end
 
+  # Returns standard TEST_REQUEST message with TestReqID of `testID`
   def test_request(testID)
     msg = FIXMessage.new(MessageTypes::TESTREQUEST)
-    msg.setField(Tags::TestReqID, testID)
+    msg.set_field(Tags::TestReqID, testID)
     msg
   end
 
+  # Returns standard SEQ_RESET / GAP_FILL message
   def sequence_reset(isGapFill = false)
     msg = FIXMessage.new(MessageTypes::SEQUENCERESET)
-    msg.setField(fixtags.GapFillFlag, isGapFill ? "Y" : "N")
-    msg.setField(fixtags.MsgSeqNum, respondingTo[Tags::BeginSeqNo])
+    msg.set_field(fixtags.GapFillFlag, isGapFill ? "Y" : "N")
+    msg.set_field(fixtags.MsgSeqNum, respondingTo[Tags::BeginSeqNo])
     msg
   end
 
+  # Returns standard RESEND_REQUEST message with `beginSeqNo` and `endSeqNo`
   def resend_request(beginSeqNo : Int32, endSeqNo : Int32 = 0)
     msg = FIXMessage.new(MessageTypes::RESENDREQUEST)
-    msg.setField(fixtags.BeginSeqNo, beginSeqNo)
-    msg.setField(fixtags.EndSeqNo, endSeqNo)
+    msg.set_field(fixtags.BeginSeqNo, beginSeqNo)
+    msg.set_field(fixtags.EndSeqNo, endSeqNo)
     msg
   end
 end

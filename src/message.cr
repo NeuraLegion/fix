@@ -1,17 +1,21 @@
 require "./protocol"
 
+# Represents a FIX message
 class FIXMessage
   getter msgType
   property data
 
-  def initialize(@msgType : String, @data = {} of Int32 => String | Array(Hash(Int32, String)))
+  # Initialize a new FIX message with message type of `msgType` and fields/groups data of `data`
+  def initialize(@msgType : String, @data = {} of Int32 => String | Array(Hash(Int32, String)) | Int32 => String)
   end
 
-  def setField(key, value)
+  # Set field `key` to `value`
+  def set_field(key, value)
     @data[key] = value.to_s
   end
 
-  def addToGroup(groupKey, values)
+  # Add a group to the repeating group `groupKey`
+  def add_to_group(groupKey, values)
     if @data.has_key? groupKey
       @data[groupKey] << values
     else
@@ -19,15 +23,18 @@ class FIXMessage
     end
   end
 
-  def setGroup(groupKey, groups : Array)
+  # Set repeating group of `groupKey` to `groups`
+  def set_group(groupKey, groups : Array)
     @data[groupKey] = groups
   end
 
-  def deleteGroup(groupKey)
+  # Delete repeating group `groupKey`
+  def delete_group(groupKey)
     @data.delete groupKey
   end
 
-  def deleteField(key)
+  # Delete field `key`
+  def delete_field(key)
     @data.delete key
   end
 

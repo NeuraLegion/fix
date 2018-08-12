@@ -3,12 +3,16 @@ require "./protocol"
 require "./utils"
 require "./message"
 
+# Helper enum for FIXClient to represent its state
 enum ConnectionState
   STARTED,
   CONNECTED,
   DISCONNECTED
 end
 
+# A FIX client capable of connecting and disconnecting to a server, maintaining a session and sending and parsing messages
+# TODO: Receiving repeating groups
+# TODO: Convinient API probably using fibers/events or non-blocking loop
 class FIXClient
   @testID : String?
   @inSeqNum : Int32 = 1
@@ -18,14 +22,16 @@ class FIXClient
   @messages = {} of Int32 => String
   @state = ConnectionState::STARTED
 
+  # Initializes a FIXClient with heartbeat interval of `hbInt`
   def initialize(@hbInt = 5)
     @client = TCPSocket.new
   end
 
+  # Connects to FIX server at hostname/ip `host` and port `port`
   def connect(host : String, port : Int)
     if @state == ConnectionState::STARTED
       @client.connect host, port
-      sendMsg FIXProtocol.logon @hbInt
+      self << FIXProtocol.logon @hbInt
       @state = ConnectionState::CONNECTED
     end
   end
@@ -37,97 +43,106 @@ class FIXClient
     end
   end
 
+  # Handles and maintains the FIX session
   def loop
     puts "loop"
     r = Random.new
     cl0rdid = r.rand(1000..10000)
     while @state == ConnectionState::CONNECTED
       puts "loop"
-      if received = recvMsg
+      if received = recv_msg
         puts received
         case received.msgType
-        when MessageTypes::HEARTBEAT
-          if !@testID.nil? && received.data[Tags::TestReqID] != @testID
+          when MessageTypes::HEARTBEAT
+            disconnect if @testID && received.data[Tags::TestReqID] != @testID
+            @testId = Nil
+          when MessageTypes::LOGOUT
+            self << FIXProtocol.logout
             disconnect
-          end
-          @testId = Nil
-        when MessageTypes::LOGOUT
-          sendMsg FIXProtocol.logout
-          disconnect
-        when MessageTypes::TESTREQUEST
-          sendMsg FIXProtocol.heartbeat received.data[Tags::TestReqID]
-        when MessageTypes::RESENDREQUEST
-        when MessageTypes::REJECT
-          raise received.data[Tags::Text].to_s
-        when MessageTypes::SEQUENCERESET
-          if received.data[Tags::GapFillFlag]? == "Y"
-          elsif received.data.has_key? Tags::NewSeqNo
-            if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
-              disconnect
-            else
-              @inSeqNum = received.data[Tags::NewSeqNo].as(String).to_i
+          when MessageTypes::TESTREQUEST
+            self << FIXProtocol.heartbeat received.data[Tags::TestReqID]
+          when MessageTypes::RESENDREQUEST
+          when MessageTypes::REJECT
+            raise received.data[Tags::Text].to_s
+          when MessageTypes::SEQUENCERESET
+            if received.data[Tags::GapFillFlag]? == "Y"
+            elsif received.data.has_key? Tags::NewSeqNo
+              if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
+                disconnect
+              else
+                @inSeqNum = received.data[Tags::NewSeqNo].as(String).to_i
+              end
             end
-          end
         end
       end
       puts "passed msg check"
       if Time.now - @lastRecv > @hbInt.seconds
         if @testID.nil?
           @testID = r.rand(1000...10000).to_s
-          sendMsg FIXProtocol.test_request @testID
+          self << FIXProtocol.test_request @testID
         else
           disconnect
         end
       end
       puts "passed hbeat check"
       if Time.now - @lastSent > @hbInt.seconds
-        sendMsg FIXProtocol.heartbeat
+        self << FIXProtocol.heartbeat
       end
       puts "ping hbeat"
       # # test message
       # msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
-      # msg.setField Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
-      # msg.setField Tags::OrderQty, r.rand(100).to_s
-      # msg.setField Tags::Symbol, "VOD.L"
-      # msg.setField Tags::SecurityID, "GB00BH4HKS39"
-      # msg.setField Tags::SecurityIDSource, "4"
-      # msg.setField Tags::Account, "TEST"
-      # msg.setField Tags::HandlInst, "1"
-      # msg.setField Tags::ExDestination, "XLON"
-      # msg.setField Tags::Side, r.rand(1..2).to_s
-      # msg.setField Tags::ClOrdID, cl0rdid.to_s
+      # msg.set_field Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
+      # msg.set_field Tags::OrderQty, r.rand(100).to_s
+      # msg.set_field Tags::Symbol, "VOD.L"
+      # msg.set_field Tags::SecurityID, "GB00BH4HKS39"
+      # msg.set_field Tags::SecurityIDSource, "4"
+      # msg.set_field Tags::Account, "TEST"
+      # msg.set_field Tags::HandlInst, "1"
+      # msg.set_field Tags::ExDestination, "XLON"
+      # msg.set_field Tags::Side, r.rand(1..2).to_s
+      # msg.set_field Tags::ClOrdID, cl0rdid.to_s
       # cl0rdid += 1
-      # msg.setField Tags::Currency, "GBP"
-      # sendMsg msg
+      # msg.set_field Tags::Currency, "GBP"
+      # self << msg
       ###
 
       sleep 5.seconds
     end
   end
 
-  def recvMsg
+  # Returns decoded incoming FIXMessage if a valid one exists in socket buffer - non blocking
+  # TODO: Read according to BodyLength
+  # TODO: Resend request in case sequence number greater than expected
+  def recv_msg
     bytes = Slice(UInt8).new(4096)
     @client.read bytes
     raw = String.new(bytes[0, bytes.index(0).not_nil!])
-    if !raw.nil?
+    if raw
       msg = FIXProtocol.decode raw
-      if !msg.nil?
-        puts "RECEIVED #{msg.data}"
-        @lastRecv = Time.now
-        @inSeqNum += 1
-        msg
+      if msg
+        case msg[Tags::MsgSeqNum] <=> @inSeqNum
+        when 0 # Equal
+          puts "RECEIVED #{msg.data}"
+          @lastRecv = Time.now
+          @inSeqNum += 1
+          msg
+        when -1 then disconnect # Smaller
+        when 1 # Bigger
+          raise "Not implemented"
+        end
       end
     end
   end
 
-  def sendMsg(msg : FIXMessage)
+  # Sends FIX message `msg` to connected server
+  def <<(msg : FIXMessage)
     msg.data.merge!({Tags::SenderCompID => "CLIENT",
-                     Tags::TargetCompID => "SERVER",
+                     Tags::TargetCompID => "TARGET",
                      Tags::MsgSeqNum    => @outSeqNum.to_s,
                      Tags::SendingTime  => Utils.encode_time(Time.utc_now)}) # add required fields
-    msg.deleteField Tags::BeginString
-    msg.deleteField Tags::BodyLength
-    msg.deleteField Tags::CheckSum
+    msg.delete_field Tags::BeginString
+    msg.delete_field Tags::BodyLength
+    msg.delete_field Tags::CheckSum
 
     encoded_body = msg.to_s
 

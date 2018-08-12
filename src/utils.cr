@@ -1,13 +1,14 @@
+# Utility functions
 module Utils
-  def self.calculate_checksum(data : String)
-    checksum = 0
-    data.each_byte do |c|
-      checksum += c
-    end
-    checksum % 256
+  extend self
+
+  # Calculates checksum of string ( sum of char values % 256 )
+  def calculate_checksum(data : String)
+    data.chars.reduce(0) { |acc, c| acc + c.ord } % 256
   end
 
-  def self.encode_time(time : Time)
+  # Encodes time in fix timestamp format
+  def encode_time(time : Time)
     time.to_s("%Y%m%d-%H:%M:%S.%L")
   end
 end
