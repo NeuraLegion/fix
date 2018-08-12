@@ -121,18 +121,18 @@ module FIXProtocol
   end
 
   # Returns standard SEQ_RESET / GAP_FILL message
-  def sequence_reset(isGapFill = false)
+  def sequence_reset(newSeqNo, isGapFill = false)
     msg = FIXMessage.new(MessageTypes::SEQUENCERESET)
-    msg.set_field(fixtags.GapFillFlag, isGapFill ? "Y" : "N")
-    msg.set_field(fixtags.MsgSeqNum, respondingTo[Tags::BeginSeqNo])
+    msg.set_field(Tags::GapFillFlag, isGapFill ? "Y" : "N")
+    msg.set_field(Tags::MsgSeqNum, newSeqNo)
     msg
   end
 
   # Returns standard RESEND_REQUEST message with `beginSeqNo` and `endSeqNo`
   def resend_request(beginSeqNo : Int32, endSeqNo : Int32 = 0)
     msg = FIXMessage.new(MessageTypes::RESENDREQUEST)
-    msg.set_field(fixtags.BeginSeqNo, beginSeqNo)
-    msg.set_field(fixtags.EndSeqNo, endSeqNo)
+    msg.set_field(Tags::BeginSeqNo, beginSeqNo)
+    msg.set_field(Tags::EndSeqNo, endSeqNo)
     msg
   end
 end
