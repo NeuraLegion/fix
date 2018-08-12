@@ -28,7 +28,7 @@ class MyApp < FIXApplication
         cl0rdid += 1
         msg.set_field Tags::Currency, "GBP"
         sess.send_msg msg
-        sleep 4.seconds
+        sleep 8.seconds
       end
     end
   end
@@ -38,19 +38,19 @@ class MyApp < FIXApplication
   end
 
   def to_admin(msg : FIXMessage)
-    puts "ADMIN ->: #{msg.data}"
+    puts "ADMIN ---->: #{msg.data}"
   end
 
   def to_app(msg : FIXMessage)
-    puts "APP ->: #{msg.data}"
+    puts "APP ---->: #{msg.data}"
   end
 
   def from_admin(msg : FIXMessage)
-    puts "ADMIN <-: #{msg.data}"
+    puts "ADMIN <----: #{msg.data}"
   end
 
   def from_app(msg : FIXMessage)
-    puts "APP <-: #{msg.data}"
+    puts "APP <----: #{msg.data}"
   end
 
   def on_error(err : FIXException)

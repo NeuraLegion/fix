@@ -49,9 +49,6 @@ class FIXSession
 
   # Handles and maintains the FIX session
   def loop
-    # puts "loop"
-    r = Random.new
-    cl0rdid = r.rand(1000..10000)
     while @state == ConnectionState::CONNECTED
       # puts "loop"
       if received = recv_msg
