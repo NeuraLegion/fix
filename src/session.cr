@@ -81,10 +81,11 @@ class FIXSession
       end
 
       # target inactivity
-      if Time.now - @lastRecv > (@hbInt + 5).seconds
+      if Time.now - @lastRecv > (@hbInt + 3).seconds
         if @testID.nil?
           @testID = r.rand(1000...10000).to_s
           self << FIXProtocol.test_request @testID
+          @lastRecv = Time.now
         else
           disconnect
         end

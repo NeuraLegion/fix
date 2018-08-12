@@ -75,11 +75,11 @@ module FIXProtocol
                                                                                          Tags::MsgType] - decoded.keys).empty?
 
     # correct checksum
-    checksum = Utils.calculate_checksum(data[0...data.rindex(Tags::CheckSum.to_s).not_nil!])
+    checksum = Utils.calculate_checksum(data[0...data.rindex("#{Tags::CheckSum}=").not_nil!])
     raise DecodeException.new DecodeFailureReason::INVALID_CHECKSUM, data unless decoded[Tags::CheckSum] == "%03d" % checksum
 
     # correct body length
-    length = data.rindex(Tags::CheckSum.to_s).not_nil! - data.index(Tags::MsgType.to_s).not_nil!
+    length = data.rindex("#{Tags::CheckSum}=").not_nil! - data.index("#{Tags::MsgType}=").not_nil!
     raise DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH, data unless decoded[Tags::BodyLength] == length.to_s
 
     # create message

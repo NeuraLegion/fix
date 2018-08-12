@@ -18,7 +18,11 @@ dependencies:
 require "fix_cr"
 ```
 
-TODO: Write usage instructions here
+Implement `FIXApplication`, create a `FIXSession` object with it and start the loop
+
+Example:
+1. Run [PyFIX](<https://github.com/wannabegeek/PyFIX>) server_example.py
+2. Run examples/simple_client.cr
 
 ## Development
 
@@ -26,7 +30,7 @@ TODO: Add all message type and blocks structures
 
 ## Contributing
 
-1. Fork it (<https://github.com/your-github-user/fix_cr/fork>)
+1. Fork it (<https://github.com/sekkr1/fix_cr/fork>)
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
@@ -34,4 +38,4 @@ TODO: Add all message type and blocks structures
 
 ## Contributors
 
-- [your-github-user](https://github.com/your-github-user) Dekel - creator, maintainer
+- [sekkr1](https://github.com/sekkr1) Dekel - creator, maintainer
