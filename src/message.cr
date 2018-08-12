@@ -6,7 +6,7 @@ class FIXMessage
   property data
 
   # Initialize a new FIX message with message type of `msgType` and fields/groups data of `data`
-  def initialize(@msgType : String, @data = {} of Int32 => String | Array(Hash(Int32, String)) | Int32 => String)
+  def initialize(@msgType : String, @data = {} of Int32 => String | Array(Hash(Int32, String)))
   end
 
   # Set field `key` to `value`

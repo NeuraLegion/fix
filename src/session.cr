@@ -3,7 +3,7 @@ require "./protocol"
 require "./utils"
 require "./message"
 
-# Helper enum for FIXClient to represent its state
+# Helper enum for FIXSession to represent its state
 enum ConnectionState
   STARTED,
   CONNECTED,
@@ -13,7 +13,7 @@ end
 # A FIX client capable of connecting and disconnecting to a server, maintaining a session and sending and parsing messages
 # TODO: Receiving repeating groups
 # TODO: Convinient API probably using fibers/events or non-blocking loop
-class FIXClient
+class FIXSession
   @testID : String?
   @inSeqNum : Int32 = 1
   @outSeqNum : Int32 = 1
@@ -22,7 +22,7 @@ class FIXClient
   @messages = {} of Int32 => String
   @state = ConnectionState::STARTED
 
-  # Initializes a FIXClient with heartbeat interval of `hbInt`
+  # Initializes a FIXSession with heartbeat interval of `hbInt`
   def initialize(@hbInt = 5)
     @client = TCPSocket.new
   end
@@ -53,26 +53,26 @@ class FIXClient
       if received = recv_msg
         puts received
         case received.msgType
-          when MessageTypes::HEARTBEAT
-            disconnect if @testID && received.data[Tags::TestReqID] != @testID
-            @testId = Nil
-          when MessageTypes::LOGOUT
-            self << FIXProtocol.logout
-            disconnect
-          when MessageTypes::TESTREQUEST
-            self << FIXProtocol.heartbeat received.data[Tags::TestReqID]
-          when MessageTypes::RESENDREQUEST
-          when MessageTypes::REJECT
-            raise received.data[Tags::Text].to_s
-          when MessageTypes::SEQUENCERESET
-            if received.data[Tags::GapFillFlag]? == "Y"
-            elsif received.data.has_key? Tags::NewSeqNo
-              if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
-                disconnect
-              else
-                @inSeqNum = received.data[Tags::NewSeqNo].as(String).to_i
-              end
+        when MessageTypes::HEARTBEAT
+          disconnect if @testID && received.data[Tags::TestReqID] != @testID
+          @testId = Nil
+        when MessageTypes::LOGOUT
+          self << FIXProtocol.logout
+          disconnect
+        when MessageTypes::TESTREQUEST
+          self << FIXProtocol.heartbeat received.data[Tags::TestReqID]
+        when MessageTypes::RESENDREQUEST
+        when MessageTypes::REJECT
+          raise received.data[Tags::Text].to_s
+        when MessageTypes::SEQUENCERESET
+          if received.data[Tags::GapFillFlag]? == "Y"
+          elsif received.data.has_key? Tags::NewSeqNo
+            if received.data[Tags::NewSeqNo].as(String).to_i < @inSeqNum
+              disconnect
+            else
+              @inSeqNum = received.data[Tags::NewSeqNo].as(String).to_i
             end
+          end
         end
       end
       puts "passed msg check"
@@ -89,22 +89,6 @@ class FIXClient
         self << FIXProtocol.heartbeat
       end
       puts "ping hbeat"
-      # # test message
-      # msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
-      # msg.set_field Tags::Price, "%0.2f" % r.rand(10.0..13.0).to_s
-      # msg.set_field Tags::OrderQty, r.rand(100).to_s
-      # msg.set_field Tags::Symbol, "VOD.L"
-      # msg.set_field Tags::SecurityID, "GB00BH4HKS39"
-      # msg.set_field Tags::SecurityIDSource, "4"
-      # msg.set_field Tags::Account, "TEST"
-      # msg.set_field Tags::HandlInst, "1"
-      # msg.set_field Tags::ExDestination, "XLON"
-      # msg.set_field Tags::Side, r.rand(1..2).to_s
-      # msg.set_field Tags::ClOrdID, cl0rdid.to_s
-      # cl0rdid += 1
-      # msg.set_field Tags::Currency, "GBP"
-      # self << msg
-      ###
 
       sleep 5.seconds
     end
@@ -127,7 +111,7 @@ class FIXClient
           @inSeqNum += 1
           msg
         when -1 then disconnect # Smaller
-        when 1 # Bigger
+        when 1                  # Bigger
           raise "Not implemented"
         end
       end
@@ -161,7 +145,3 @@ class FIXClient
     @outSeqNum += 1
   end
 end
-
-c = FIXClient.new
-c.connect "127.0.0.1", 9898
-c.loop
