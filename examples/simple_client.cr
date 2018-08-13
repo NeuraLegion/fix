@@ -3,7 +3,7 @@ require "../src/message"
 require "../src/exception"
 require "../src/protocol"
 
-sess = FIXSession.new
+sess = FIX::Session.new
 
 sess.on_connect do
   puts "CONNECTED"
@@ -14,7 +14,7 @@ sess.on_logon do
   spawn do
     cl0rdid = Random.rand(1000..2000)
     loop do
-      msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
+      msg = FIX::Message.new MessageTypes::NEWORDERSINGLE
       msg.set_field Tags::Price, "%0.2f" % Random.rand(10.0..13.0).to_s
       msg.set_field Tags::OrderQty, Random.rand(100).to_s
       msg.set_field Tags::Symbol, "VOD.L"
@@ -56,7 +56,7 @@ end
 sess.on_error do |err|
   puts "ERROR: #{err}"
 end
-msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
+msg = Message.new MessageTypes::NEWORDERSINGLE
 msg.set_field Tags::Price, "%0.2f" % Random.rand(10.0..13.0).to_s
 msg.set_field Tags::OrderQty, Random.rand(100).to_s
 msg.set_field Tags::Symbol, "VOD.L"
