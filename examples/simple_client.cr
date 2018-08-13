@@ -56,6 +56,16 @@ end
 sess.on_error do |err|
   puts "ERROR: #{err}"
 end
-
-sess.connect "127.0.0.1", 9898
-sess.loop
+msg = FIXMessage.new MessageTypes::NEWORDERSINGLE
+msg.set_field Tags::Price, "%0.2f" % Random.rand(10.0..13.0).to_s
+msg.set_field Tags::OrderQty, Random.rand(100).to_s
+msg.set_field Tags::Symbol, "VOD.L"
+msg.set_field Tags::SecurityID, "GB00BH4HKS39"
+msg.set_field Tags::SecurityIDSource, "4"
+msg.set_field Tags::Account, "TEST"
+msg.set_field Tags::HandlInst, "1"
+msg.set_field Tags::ExDestination, "XLON"
+msg.set_field Tags::Side, Random.rand(1..2).to_s
+msg.set_field Tags::ClOrdID, 12.to_s
+msg.set_field Tags::Currency, "GBP"
+puts msg.data
