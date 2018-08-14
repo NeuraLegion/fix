@@ -2,6 +2,8 @@
 
 A FIX ( Financial Information eXchange ) library written in pure Crystal.
 
+[![CircleCI](https://circleci.com/gh/NeuraLegion/fix/tree/master.svg?style=svg)](https://circleci.com/gh/NeuraLegion/fix/tree/master)
+
 ## Installation
 
 Add this to your application's `shard.yml`:
