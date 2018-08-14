@@ -1,0 +1,52 @@
+defaults: &defaults
+  working_directory: ~/project
+  machine: true
+
+version: 2
+jobs:
+  build:
+    <<: *defaults
+    steps:
+      - run:
+          name: Update PATH and Define Environment Variable at Runtime
+          command: |
+            echo 'CRYSTAL_VERSION=0.26.0' >> $BASH_ENV
+            echo 'export PATH=${HOME}/.crystal/bin:$PATH' >> $BASH_ENV
+            echo 'export CRYSTAL_URL=https://github.com/crystal-lang/crystal/releases/download/$CRYSTAL_VERSION/crystal-$CRYSTAL_VERSION-1-linux-x86_64.tar.gz' >> $BASH_ENV
+      - run:
+          name: Install software packages
+          command: |
+            sudo add-apt-repository ppa:deadsnakes/ppa \
+            && sudo apt-get update \
+            && sudo apt-get install build-essential curl libevent-dev libssl-dev libxml2-dev libyaml-dev libgmp-dev
+      - run:
+          name: Install Crystal lang
+          command: |
+            if [[ ! -e "${HOME}/.crystal/bin/crystal" || $(crystal --version | grep -P -o '\d+\.\d+\.\d+') != "${CRYSTAL_VERSION}" ]]; then
+              mkdir -p "${HOME}/.crystal"
+              wget "${CRYSTAL_URL}" -O "${HOME}/crystal.tar.gz" &&\
+              tar -zxvf "${HOME}/crystal.tar.gz" -C "${HOME}/.crystal" --strip-components=1
+            fi
+      - checkout
+      - restore_cache:
+          keys:
+            - crystal-libs-cache
+      - run: shards update
+      - save_cache:
+          key: crystal-libs-cache
+          paths:
+            - lib
+            - .shards
+      - run: lib/ameba/bin/ameba
+      - run: crystal tool format --check
+      - run: crystal spec
+      - run: shards build
+
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /.*/
