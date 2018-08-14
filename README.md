@@ -18,16 +18,12 @@ dependencies:
 require "fix"
 ```
 
-Create a `Session` object, hook to its callbacks(`on_connect`, `on_logon`, `on_logout`, `on_error`, `from_admin`, `to_admin`, `from_app`, and `to_app`), connect to server with `connect` and then `loop`.
+Create a `Session` object, hook to its callbacks(`on_logon`, `on_error`, `from_admin`, `to_admin`, `from_app`, and `to_app`) and `run`.
 
 You can find the below example in the `examples/` folder
 
 ```crystal
-sess = FIX::Session.new
-
-sess.on_connect do
-  puts "CONNECTED"
-end
+sess = FIX::Session.new "localhost", 9898
 
 sess.on_logon do
   puts "LOGGED ON"
@@ -53,10 +49,6 @@ sess.on_logon do
   end
 end
 
-sess.on_logout do
-  puts "DISCONNECTED"
-end
-
 sess.to_admin do |msg|
   puts "ADMIN ---->: #{msg.data}"
 end
@@ -77,8 +69,7 @@ sess.on_error do |err|
   puts "ERROR: #{err}"
 end
 
-sess.connect "localhost", 9898
-sess.loop
+sess.run
 ```
 
 ## Development
