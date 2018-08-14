@@ -15,10 +15,10 @@ dependencies:
 ## Usage
 
 ```crystal
-require "fix_cr"
+require "fix"
 ```
 
-Require `FIX`, create a `Session` object, hook to its callbacks(`on_connect`, `on_logon`, `on_logout`, `on_error`, `from_admin`, `to_admin`, `from_app`, and `to_app`), connect to server with `connect` and then `loop`.
+Create a `Session` object, hook to its callbacks(`on_connect`, `on_logon`, `on_logout`, `on_error`, `from_admin`, `to_admin`, `from_app`, and `to_app`), connect to server with `connect` and then `loop`.
 
 You can find examples in the `examples/` folder
 
