@@ -26,7 +26,7 @@ module FIX
         if value.is_a?(Array(Hash(Int32, String)))
           groups = value.map do |group|
             group.map do |k, v|
-              item = "#{k}=#{v}\x01"
+              "#{k}=#{v}\x01"
             end.join
           end.join
           "#{key}=#{value.size}\x01#{groups}"
@@ -42,7 +42,7 @@ module FIX
     # ```
     # will yield
     # ```text
-    # Message(msgType="A", data={6=>"asd", 7=>"tr", 20=>"2"})
+    # Message(msg_type="A", data={6=>"asd", 7=>"tr", 20=>"2"})
     # ```
     # TODO: Add repeating groups decoding
     def decode(data : String) : Message

@@ -448,7 +448,7 @@ module FIX
     :PartyIDSource                                   => 447,
     :PartyID                                         => 448,
     :TotalVolumeTradedDate                           => 449,
-    :TotalVolumeTraded                               => 450,
+    :TotalVolumeTraded2                              => 450,
     :NetChgPrevDay                                   => 451,
     :PartyRole                                       => 452,
     :NoPartyIDs                                      => 453,
