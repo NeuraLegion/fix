@@ -1,10 +1,6 @@
 require "../src/fix"
 
-sess = FIX::Session.new
-
-sess.on_connect do
-  puts "CONNECTED"
-end
+sess = FIX::Session.new "localhost", 9898
 
 sess.on_logon do
   puts "LOGGED ON"
@@ -30,10 +26,6 @@ sess.on_logon do
   end
 end
 
-sess.on_logout do
-  puts "DISCONNECTED"
-end
-
 sess.to_admin do |msg|
   puts "ADMIN ---->: #{msg.data}"
 end
@@ -54,5 +46,4 @@ sess.on_error do |err|
   puts "ERROR: #{err}"
 end
 
-sess.connect "localhost", 9898
-sess.loop
+sess.run

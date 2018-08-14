@@ -5,13 +5,6 @@ require "./message"
 require "./exception"
 
 module FIX
-  # Helper enum for FIXSession to represent its state
-  enum ConnectionState
-    STARTED,
-    CONNECTED,
-    DISCONNECTED
-  end
-
   # A FIX client capable of connecting and disconnecting to a server, maintaining a session and sending and parsing messages
   # TODO: Receiving repeating groups
   class Session
@@ -21,23 +14,13 @@ module FIX
     @last_sent = Time.now
     @last_recv = Time.now
     @messages = {} of Int32 => Message
-    @state = ConnectionState::STARTED
     @username : String?
     @password : String?
-
-    # Called when connected to server
-    def on_connect(&block)
-      @on_connect_callback = block
-    end
+    @running = true
 
     # Called when succesful logon takes place
     def on_logon(&block)
       @on_logon_callback = block
-    end
-
-    # Called when session ends, either by logout or disconnection
-    def on_logout(&block)
-      @on_logout_callback = block
     end
 
     # Called when an administrative/session message is about to be sent, throw `DoNotSend` to not send
@@ -65,38 +48,28 @@ module FIX
       @on_error_callback = block
     end
 
-    # Initializes a FIXSession with heartbeat interval of `hb_int`
-    def initialize(@fix_ver = "FIX.4.4", @fixt = false, @hb_int = 30, @username = nil, @password = nil)
-      @client = TCPSocket.new
-    end
-
-    # Connects to FIX server at hostname/ip `host` and port `port`
-    def connect(host : String, port : Int)
-      if @state == ConnectionState::STARTED
-        @client.connect host, port
-        send_msg Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
-        @state = ConnectionState::CONNECTED
-        @on_connect_callback.not_nil!.call if @on_connect_callback
-      end
+    # Initializes and connects a Session with heartbeat interval of `hb_int`
+    def initialize(host : String, port : Int32, @username = nil, @password = nil, @fix_ver = "FIX.4.4", @fixt = false, @hb_int = 30)
+      @client = TCPSocket.new host, port
+      send_msg Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
     def disconnect
-      if @state == ConnectionState::CONNECTED
-        send_msg Protocol.logout
-        @client.close
-        @state = ConnectionState::DISCONNECTED
-        @on_logout_callback.not_nil!.call if @on_logout_callback
-      end
+      return unless @running
+      send_msg Protocol.logout
+      @client.close
+      @running = false
     end
 
     # Handles and maintains the FIX session
-    def loop
-      while @state == ConnectionState::CONNECTED
+    def run
+      while @running
         # puts "loop"
         if received = recv_msg
-          # puts received
+          puts received.data
           case received.msg_type
           when MESSAGE_TYPES[:Logon]
+            # puts "received logon"
             @on_logon_callback.not_nil!.call if @on_logon_callback
           when MESSAGE_TYPES[:Heartbeat]
             disconnect if @test_id && (!received.data.has_key? TAGS[:TestReqID] || received.data[TAGS[:TestReqID]] != @test_id)
@@ -157,21 +130,30 @@ module FIX
 
     # Returns decoded incoming Message if a valid one exists in socket buffer - non blocking
     def recv_msg : Message?
+      return unless @running
+
       raw = ""
-      while (@state == ConnectionState::CONNECTED) && (b = @client.read_byte)
-        raw += b.chr
-        if (b == 1) && (i = raw.rindex("#{TAGS[:BodyLength]}="))
-          bytes = Slice(UInt8).new(raw[i + 1 + TAGS[:BodyLength].to_s.size...-1].to_i + TAGS[:CheckSum].to_s.size + 5)
-          if !@client.read_fully? bytes
-            @on_error_callback.not_nil!.call DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH if @on_error_callback
-            return
+
+      begin
+        while b = @client.read_byte
+          raw += b.chr
+          if (b == 1) && (i = raw.rindex("#{TAGS[:BodyLength]}="))
+            bytes = Slice(UInt8).new(raw[i + 1 + TAGS[:BodyLength].to_s.size...-1].to_i + TAGS[:CheckSum].to_s.size + 5)
+            if !@client.read_fully? bytes
+              @on_error_callback.not_nil!.call DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH if @on_error_callback
+              return
+            end
+            raw += String.new(bytes)
+            break
           end
-          raw += String.new(bytes)
-          break
+        end
+      rescue e
+        if @running
+          raise e
+        else
+          return
         end
       end
-
-      return unless @state == ConnectionState::CONNECTED
 
       if raw != ""
         begin
@@ -192,7 +174,7 @@ module FIX
               end
               @last_recv = Time.now
               @in_seq += 1
-              msg
+              return msg
             elsif msg.data[TAGS[:MsgSeqNum]].as(String).to_i > @in_seq
               send_msg Protocol.resend_request @in_seq
             else
@@ -204,10 +186,16 @@ module FIX
           @on_error_callback.not_nil!.call ex if @on_error_callback
         end
       end
+      return nil
     end
 
     # Sends FIX message `msg` to connected server, set `validate` to `False` to send message as-is
     def send_msg(msg : Message, validate = true) : Nil
+      puts msg.data
+      return unless @running
+
+      puts msg.data
+
       msg.data.merge!({TAGS[:SenderCompID] => "CLIENT",
                        TAGS[:TargetCompID] => "TARGET",
                        TAGS[:MsgSeqNum]    => @out_seq.to_s,
