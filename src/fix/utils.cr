@@ -58,25 +58,25 @@ module FIX
 
       # validate message
       # contains required fields
-      raise DecodeException.new DecodeFailureReason::REQUIRED_FIELD_MISSING, data unless ([Tags::CheckSum,
-                                                                                           Tags::BeginString,
-                                                                                           Tags::BodyLength,
-                                                                                           Tags::SenderCompID,
-                                                                                           Tags::TargetCompID,
-                                                                                           Tags::MsgSeqNum,
-                                                                                           Tags::SendingTime,
-                                                                                           Tags::MsgType] - decoded.keys).empty?
+      raise DecodeException.new DecodeFailureReason::REQUIRED_FIELD_MISSING, data unless ([TAGS[:CheckSum],
+                                                                                           TAGS[:BeginString],
+                                                                                           TAGS[:BodyLength],
+                                                                                           TAGS[:SenderCompID],
+                                                                                           TAGS[:TargetCompID],
+                                                                                           TAGS[:MsgSeqNum],
+                                                                                           TAGS[:SendingTime],
+                                                                                           TAGS[:MsgType]] - decoded.keys).empty?
 
       # correct checksum
-      checksum = Utils.calculate_checksum(data[0...data.rindex("#{Tags::CheckSum}=").not_nil!])
-      raise DecodeException.new DecodeFailureReason::INVALID_CHECKSUM, data unless decoded[Tags::CheckSum] == "%03d" % checksum
+      checksum = Utils.calculate_checksum(data[0...data.rindex("#{TAGS[:CheckSum]}=").not_nil!])
+      raise DecodeException.new DecodeFailureReason::INVALID_CHECKSUM, data unless decoded[TAGS[:CheckSum]] == "%03d" % checksum
 
       # correct body length
-      length = data.rindex("#{Tags::CheckSum}=").not_nil! - data.index("#{Tags::MsgType}=").not_nil!
-      raise DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH, data unless decoded[Tags::BodyLength] == length.to_s
+      length = data.rindex("#{TAGS[:CheckSum]}=").not_nil! - data.index("#{TAGS[:MsgType]}=").not_nil!
+      raise DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH, data unless decoded[TAGS[:BodyLength]] == length.to_s
 
       # create message
-      msgtype = decoded.delete(Tags::MsgType).as(String)
+      msgtype = decoded.delete(TAGS[:MsgType]).as(String)
       return Message.new msgtype, decoded
     end
   end

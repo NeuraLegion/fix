@@ -22,6 +22,8 @@ module FIX
     @lastRecv = Time.now
     @messages = {} of Int32 => Message
     @state = ConnectionState::STARTED
+    @username : String?
+    @password : String?
 
     # Called when connected to server
     def on_connect(&block)
@@ -59,12 +61,12 @@ module FIX
     end
 
     # Called when an error occurs ( Session or message decoding issues )
-    def on_error(&block : FIXException ->)
+    def on_error(&block : Exception ->)
       @on_error_callback = block
     end
 
     # Initializes a FIXSession with heartbeat interval of `hbInt`
-    def initialize(@proto : Protocol, @hbInt = 5)
+    def initialize(@sessVer = "FIX.4.4", @fixt = false, @hbInt = 5, @username = Nil, @password = Nil)
       @client = TCPSocket.new
     end
 
@@ -93,39 +95,39 @@ module FIX
         if received = recv_msg
           # puts received
           case received.msgType
-          when @proto.messageTypes[:LOGON]
+          when MESSAGE_TYPES[:Logon]
             @on_logon_callback.not_nil!.call if @on_logon_callback
-          when @proto.messageTypes[:HEARTBEAT]
-            disconnect if @testID && (!received.data.has_key? @proto.tags[:TestReqID] || received.data[@proto.tags[:TestReqID]] != @testID)
+          when MESSAGE_TYPES[:Heartbeat]
+            disconnect if @testID && (!received.data.has_key? TAGS[:TestReqID] || received.data[TAGS[:TestReqID]] != @testID)
             @testId = Nil
-          when @proto.messageTypes[:LOGOUT]
+          when MESSAGE_TYPES[:Logout]
             send_msg Protocol.logout
             disconnect
-          when @proto.messageTypes[:TESTREQUEST]
-            send_msg Protocol.heartbeat received.data[@proto.tags[:TestReqID]]?.to_s
-          when @proto.messageTypes[:RESENDREQUEST]
-            i = received.data[@proto.tags[:BeginSeqNo]].as(String).to_i
+          when MESSAGE_TYPES[:TestRequest]
+            send_msg Protocol.heartbeat received.data[TAGS[:TestReqID]]?.to_s
+          when MESSAGE_TYPES[:ResendRequest]
+            i = received.data[TAGS[:BeginSeqNo]].as(String).to_i
             @messages.each do |k, v|
               if k >= i
                 if k > i
                   send_msg Protocol.sequence_reset(k, true)
                   i = k
                 end
-                v.set_field(@proto.tags[:PossDupFlag], "Y")
+                v.set_field(TAGS[:PossDupFlag], "Y")
                 send_msg v
                 i += 1
               end
             end
-          when @proto.messageTypes[:REJECT]
-            @on_error_callback.not_nil!.call SessionRejectException.new(SessionRejectReason.new(received.data[@proto.tags[:SessionRejectReason]].as(String).to_i), received.data[@proto.tags[:Text]].as(String)) if @on_error_callback
-          when @proto.messageTypes[:SEQUENCERESET]
-            if received.data[@proto.tags[:GapFillFlag]]? != "Y" && received.data[@proto.tags[:MsgSeqNum]].as(String).to_i != @inSeqNum
+          when MESSAGE_TYPES[:Reject]
+            @on_error_callback.not_nil!.call SessionRejectException.new(SessionRejectReason.new(received.data[TAGS[:SessionRejectReason]].as(String).to_i), received.data[TAGS[:Text]].as(String)) if @on_error_callback
+          when MESSAGE_TYPES[:SequenceReset]
+            if received.data[TAGS[:GapFillFlag]]? != "Y" && received.data[TAGS[:MsgSeqNum]].as(String).to_i != @inSeqNum
               @on_error_callback.not_nil!.call InvalidSeqNum.new if @on_error_callback
-            elsif received.data.has_key? @proto.tags[:NewSeqNo]
-              if received.data[@proto.tags[:NewSeqNo]].as(String).to_i < @inSeqNum
+            elsif received.data.has_key? TAGS[:NewSeqNo]
+              if received.data[TAGS[:NewSeqNo]].as(String).to_i < @inSeqNum
                 disconnect
               else
-                @inSeqNum = received.data[@proto.tags[:NewSeqNo]].as(String).to_i
+                @inSeqNum = received.data[TAGS[:NewSeqNo]].as(String).to_i
               end
             end
           end
@@ -157,8 +159,8 @@ module FIX
       raw = ""
       while b = @client.read_byte
         raw += b.chr
-        if (b == 1) && (i = raw.rindex("#{@proto.tags[:BodyLength]}="))
-          bytes = Slice(UInt8).new(raw[i + 1 + @proto.tags[:BodyLength].to_s.size...-1].to_i + @proto.tags[:CheckSum].to_s.size + 5)
+        if (b == 1) && (i = raw.rindex("#{TAGS[:BodyLength]}="))
+          bytes = Slice(UInt8).new(raw[i + 1 + TAGS[:BodyLength].to_s.size...-1].to_i + TAGS[:CheckSum].to_s.size + 5)
           if !@client.read_fully? bytes
             @on_error_callback.not_nil!.call DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH if @on_error_callback
             return
@@ -170,17 +172,17 @@ module FIX
 
       if raw != ""
         begin
-          msg = Protocol.decode raw
+          msg = Utils.decode raw
           if msg
-            if msg.msgType == @proto.messageTypes[:SEQUENCERESET] || msg.data[@proto.tags[:MsgSeqNum]].as(String).to_i == @inSeqNum
+            if msg.msgType == MESSAGE_TYPES[:SequenceReset] || msg.data[TAGS[:MsgSeqNum]].as(String).to_i == @inSeqNum
               # puts "RECEIVED #{msg.data}"
-              if [@proto.messageTypes[:HEARTBEAT],
-                  @proto.messageTypes[:LOGOUT],
-                  @proto.messageTypes[:LOGON],
-                  @proto.messageTypes[:TESTREQUEST],
-                  @proto.messageTypes[:RESENDREQUEST],
-                  @proto.messageTypes[:REJECT],
-                  @proto.messageTypes[:SEQUENCERESET]].includes? msg.msgType
+              if [MESSAGE_TYPES[:Heartbeat],
+                  MESSAGE_TYPES[:Logout],
+                  MESSAGE_TYPES[:Logon],
+                  MESSAGE_TYPES[:TestRequest],
+                  MESSAGE_TYPES[:ResendRequest],
+                  MESSAGE_TYPES[:Reject],
+                  MESSAGE_TYPES[:SequenceReset]].includes? msg.msgType
                 @from_admin_callback.not_nil!.call msg if @from_admin_callback
               else
                 @from_app_callback.not_nil!.call msg if @from_app_callback
@@ -188,7 +190,7 @@ module FIX
               @lastRecv = Time.now
               @inSeqNum += 1
               msg
-            elsif msg.data[@proto.tags[:MsgSeqNum]].as(String).to_i > @inSeqNum
+            elsif msg.data[TAGS[:MsgSeqNum]].as(String).to_i > @inSeqNum
               send_msg Protocol.resend_request @inSeqNum
             else
               @on_error_callback.not_nil!.call InvalidSeqNum.new if @on_error_callback
@@ -203,38 +205,38 @@ module FIX
 
     # Sends FIX message `msg` to connected server, set `validate` to `False` to send message as-is
     def send_msg(msg : Message, validate = true) : Nil
-      msg.data.merge!({@proto.tags[:SenderCompID] => "CLIENT",
-                       @proto.tags[:TargetCompID] => "TARGET",
-                       @proto.tags[:MsgSeqNum]    => @outSeqNum.to_s,
-                       @proto.tags[:SendingTime]  => Utils.encode_time(Time.utc_now)}) if validate # add required fields
+      msg.data.merge!({TAGS[:SenderCompID] => "CLIENT",
+                       TAGS[:TargetCompID] => "TARGET",
+                       TAGS[:MsgSeqNum]    => @outSeqNum.to_s,
+                       TAGS[:SendingTime]  => Utils.encode_time(Time.utc_now)}) if validate # add required fields
 
-      beginString = (validate || !msg.data.has_key? @proto.tags[:BeginString]) ? Protocol::NAME : msg.data[@proto.tags[:BeginString]]
-      msg.delete_field @proto.tags[:BeginString]
+      beginString = (validate || !msg.data.has_key? TAGS[:BeginString]) ? @sessVer : msg.data[TAGS[:BeginString]]
+      msg.delete_field TAGS[:BeginString]
 
-      msg.delete_field @proto.tags[:BodyLength]
-      msg.delete_field @proto.tags[:CheckSum]
+      msg.delete_field TAGS[:BodyLength]
+      msg.delete_field TAGS[:CheckSum]
 
-      encoded_body = Protocol.encode(msg.data)
+      encoded_body = Utils.encode(msg.data)
 
-      header = {@proto.tags[:BeginString] => beginString,
-                @proto.tags[:BodyLength]  => (encoded_body.size + 4 + msg.msgType.size).to_s,
-                @proto.tags[:MsgType]     => msg.msgType}
+      header = {TAGS[:BeginString] => beginString,
+                TAGS[:BodyLength]  => (encoded_body.size + 4 + msg.msgType.size).to_s,
+                TAGS[:MsgType]     => msg.msgType}
 
-      encoded_msg = "#{Protocol.encode(header)}#{encoded_body}"
+      encoded_msg = "#{Utils.encode(header)}#{encoded_body}"
 
       checksum = "%03d" % Utils.calculate_checksum(encoded_msg)
 
-      msg.data = header.merge(msg.data).merge({@proto.tags[:CheckSum] => checksum})
+      msg.data = header.merge(msg.data).merge({TAGS[:CheckSum] => checksum})
       # puts encoded_msg.gsub "\x01", "|"
 
       begin
-        if [@proto.messageTypes[:HEARTBEAT],
-            @proto.messageTypes[:LOGOUT],
-            @proto.messageTypes[:LOGON],
-            @proto.messageTypes[:TESTREQUEST],
-            @proto.messageTypes[:RESENDREQUEST],
-            @proto.messageTypes[:REJECT],
-            @proto.messageTypes[:SEQUENCERESET]].includes? msg.msgType
+        if [MESSAGE_TYPES[:Heartbeat],
+            MESSAGE_TYPES[:Logout],
+            MESSAGE_TYPES[:Logon],
+            MESSAGE_TYPES[:TestRequest],
+            MESSAGE_TYPES[:ResendRequest],
+            MESSAGE_TYPES[:Reject],
+            MESSAGE_TYPES[:SequenceReset]].includes? msg.msgType
           @to_admin_callback.not_nil!.call msg if @to_admin_callback
         else
           @to_app_callback.not_nil!.call msg if @to_app_callback
@@ -244,7 +246,7 @@ module FIX
         return
       end
 
-      encoded_msg = "#{encoded_msg}#{@proto.tags[:CheckSum]}=%03d\x01" % checksum
+      encoded_msg = "#{encoded_msg}#{TAGS[:CheckSum]}=%03d\x01" % checksum
 
       @client.send encoded_msg
       # puts "SENT #{msg.data}"

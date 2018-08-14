@@ -1,5 +1,3 @@
-require "./protocol"
-
 module FIX
   # Represents a FIX message
   class Message
@@ -37,10 +35,6 @@ module FIX
     # Delete field `key`
     def delete_field(key)
       @data.delete key
-    end
-
-    def to_s
-      FIXProtocol.encode(@data)
     end
   end
 end
