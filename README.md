@@ -1,4 +1,4 @@
-# fix_cr
+# fix
 
 A FIX ( Financial Information eXchange ) library written in pure Crystal.
 
@@ -9,7 +9,7 @@ Add this to your application's `shard.yml`:
 ```yaml
 dependencies:
   fix_cr:
-    github: NeuraLegion/fix_cr
+    github: NeuraLegion/fix
 ```
 
 ## Usage
@@ -18,19 +18,19 @@ dependencies:
 require "fix_cr"
 ```
 
-Implement `FIXApplication`, create a `FIXSession` object with it and start the loop
+Require `FIX`, create a `Session` object ,hook to its callbacks(`on_connect`, `on_logon`, `on_logout`, `on_error`, `from_admin`, `to_admin`, `from_app`, and `to_app`), connect to server with `connect` and then `loop`.
 
-Example:
-1. Run [PyFIX](<https://github.com/wannabegeek/PyFIX>) server_example.py
-2. Run examples/simple_client.cr
+You can find examples in the `examples/` folder
 
 ## Development
 
-TODO: Add all message type and blocks structures
+TODO: Repeating groups decoding
+TODO: Encryption
+TODO: Server side
 
 ## Contributing
 
-1. Fork it (<https://github.com/sekkr1/fix_cr/fork>)
+1. Fork it (<https://github.com/sekkr1/fix/fork>)
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)

@@ -9,7 +9,7 @@ module FIX
     end
 
     # Set field `key` to `value`
-    def set_field(key, value)
+    def set_field(key, value : Int32 | String)
       @data[key] = value.to_s
     end
 

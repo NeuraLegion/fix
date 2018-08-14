@@ -6,10 +6,12 @@ module FIX
     extend self
 
     # Returns standard LOGON message with heartbeat interval of `hbInt` and optionally `resetSeq` flag
-    def logon(hbInt = 30, resetSeq = true)
+    def logon(hbInt = 30, resetSeq = true, username : String? = Nil, password : String? = Nil)
       msg = Message.new MESSAGE_TYPES[:Logon]
       msg.set_field(TAGS[:EncryptMethod], "0")
-      msg.set_field(TAGS[:ResetSeqNumFlag], resetSeq ? "Y" : "N")
+      msg.set_field(TAGS[:ResetSeqNumFlag], "Y") if resetSeq
+      msg.set_field(TAGS[:Username], username) if username
+      msg.set_field(TAGS[:Password], password) if password
       msg.set_field(TAGS[:HeartBtInt], hbInt.to_s)
       msg
     end
@@ -32,7 +34,7 @@ module FIX
     end
 
     # Returns standard TEST_REQUEST message with TestReqID of `testID`
-    def test_request(testID)
+    def test_request(testID : String)
       msg = Message.new(MESSAGE_TYPES[:TestRequest])
       msg.set_field(TAGS[:TestReqID], testID)
       msg
@@ -41,7 +43,7 @@ module FIX
     # Returns standard SEQ_RESET / GAP_FILL message
     def sequence_reset(newSeqNo, isGapFill = false)
       msg = Message.new(MESSAGE_TYPES[:SequenceReset])
-      msg.set_field(TAGS[:GapFillFlag], isGapFill ? "Y" : "N")
+      msg.set_field(TAGS[:GapFillFlag], "Y") if isGapFill
       msg.set_field(TAGS[:MsgSeqNum], newSeqNo)
       msg
     end

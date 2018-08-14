@@ -66,7 +66,7 @@ module FIX
     end
 
     # Initializes a FIXSession with heartbeat interval of `hbInt`
-    def initialize(@sessVer = "FIX.4.4", @fixt = false, @hbInt = 5, @username = Nil, @password = Nil)
+    def initialize(@fixVer = "FIX.4.4", @fixt = false, @hbInt = 30, @username = nil, @password = nil)
       @client = TCPSocket.new
     end
 
@@ -74,7 +74,7 @@ module FIX
     def connect(host : String, port : Int)
       if @state == ConnectionState::STARTED
         @client.connect host, port
-        send_msg Protocol.logon @hbInt
+        send_msg Protocol.logon(hbInt: @hbInt, resetSeq: true, username: @username, password: @password)
         @state = ConnectionState::CONNECTED
         @on_connect_callback.not_nil!.call if @on_connect_callback
       end
@@ -137,7 +137,7 @@ module FIX
         if Time.now - @lastRecv > (@hbInt + 3).seconds
           if @testID.nil?
             @testID = Random.rand(1000...10000).to_s
-            send_msg Protocol.test_request @testID
+            send_msg Protocol.test_request @testID.not_nil!
             @lastRecv = Time.now
           else
             disconnect
@@ -210,7 +210,13 @@ module FIX
                        TAGS[:MsgSeqNum]    => @outSeqNum.to_s,
                        TAGS[:SendingTime]  => Utils.encode_time(Time.utc_now)}) if validate # add required fields
 
-      beginString = (validate || !msg.data.has_key? TAGS[:BeginString]) ? @sessVer : msg.data[TAGS[:BeginString]]
+      if @fixt && validate
+        beginString = "FIXT.1.1"
+        msg.set_field(TAGS[:DefaultApplVerID], @fixVer)
+      else
+        beginString = (validate || !msg.data.has_key? TAGS[:BeginString]) ? @fixVer : msg.data[TAGS[:BeginString]]
+      end
+
       msg.delete_field TAGS[:BeginString]
 
       msg.delete_field TAGS[:BodyLength]
