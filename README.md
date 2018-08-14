@@ -4,6 +4,11 @@ A FIX ( Financial Information eXchange ) library written in pure Crystal.
 
 [![CircleCI](https://circleci.com/gh/NeuraLegion/fix/tree/master.svg?style=svg)](https://circleci.com/gh/NeuraLegion/fix/tree/master)
 
+
+* From Wikipedia  
+
+The Financial Information eXchange (FIX) protocol is an electronic communications protocol initiated in 1992 for international real-time exchange of information related to the securities transactions and markets. With trillions of dollars traded annually on the NASDAQ alone, financial service entities are investing heavily in optimizing electronic trading and employing direct market access (DMA) to increase their speed to financial markets. Managing the delivery of trading applications and keeping latency low increasingly requires an understanding of the FIX protocol. 
+
 ## Installation
 
 Add this to your application's `shard.yml`:
