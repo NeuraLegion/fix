@@ -54,7 +54,7 @@ module FIX
       send_msg Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
-    def disconnect
+    def close
       return unless @running
       send_msg Protocol.logout
       @client.close
@@ -72,11 +72,11 @@ module FIX
             # puts "received logon"
             @on_logon_callback.not_nil!.call if @on_logon_callback
           when MESSAGE_TYPES[:Heartbeat]
-            disconnect if @test_id && (!received.data.has_key? TAGS[:TestReqID] || received.data[TAGS[:TestReqID]] != @test_id)
+            close if @test_id && (!received.data.has_key? TAGS[:TestReqID] || received.data[TAGS[:TestReqID]] != @test_id)
             @test_id = nil
           when MESSAGE_TYPES[:Logout]
             send_msg Protocol.logout
-            disconnect
+            close
           when MESSAGE_TYPES[:TestRequest]
             send_msg Protocol.heartbeat received.data[TAGS[:TestReqID]]?.to_s
           when MESSAGE_TYPES[:ResendRequest]
@@ -99,7 +99,7 @@ module FIX
               @on_error_callback.not_nil!.call InvalidSeqNum.new if @on_error_callback
             elsif received.data.has_key? TAGS[:NewSeqNo]
               if received.data[TAGS[:NewSeqNo]].as(String).to_i < @in_seq
-                disconnect
+                close
               else
                 @in_seq = received.data[TAGS[:NewSeqNo]].as(String).to_i
               end
@@ -114,7 +114,7 @@ module FIX
             send_msg Protocol.test_request @test_id.not_nil!
             @last_recv = Time.now
           else
-            disconnect
+            close
           end
         end
 
@@ -179,7 +179,7 @@ module FIX
               send_msg Protocol.resend_request @in_seq
             else
               @on_error_callback.not_nil!.call InvalidSeqNum.new if @on_error_callback
-              disconnect
+              close
             end
           end
         rescue ex : DecodeException
