@@ -4,8 +4,12 @@ module FIX
     getter msg_type
     property data = {} of Int32 => String | Array(Hash(Int32, String))
 
+    # Initialize a new FIX message with message type of `msg_type`
+    def initialize(@msg_type : String)
+    end
+
     # Initialize a new FIX message with message type of `msg_type` and fields/groups data of `data`
-    def initialize(@msg_type : String, _data = {} of Int32 => String)
+    def initialize(@msg_type : String, _data : RawMessage)
       _data.each do |key, value|
         data[key] = value
       end
