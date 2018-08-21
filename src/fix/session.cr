@@ -54,6 +54,10 @@ module FIX
       send_msg Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
+    def closed?
+      return !@running
+    end
+
     def close
       return unless @running
       send_msg Protocol.logout
