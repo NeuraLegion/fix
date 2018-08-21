@@ -51,7 +51,7 @@ module FIX
     # Initializes and connects a Session with heartbeat interval of `hb_int`
     def initialize(host : String, port : Int32, @username = nil, @password = nil, @fix_ver = "FIX.4.4", @fixt = false, @hb_int = 30)
       @client = TCPSocket.new host, port
-      send_msg Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
+      send Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
     def closed?
@@ -60,7 +60,7 @@ module FIX
 
     def close
       return unless @running
-      send_msg Protocol.logout
+      send Protocol.logout
       @client.close
       @running = false
     end
@@ -69,7 +69,7 @@ module FIX
     def run
       while @running
         # puts "loop"
-        if received = recv_msg
+        if received = recv
           puts received.data
           case received.msg_type
           when MESSAGE_TYPES[:Logon]
@@ -79,20 +79,20 @@ module FIX
             close if @test_id && (!received.data.has_key? TAGS[:TestReqID] || received.data[TAGS[:TestReqID]] != @test_id)
             @test_id = nil
           when MESSAGE_TYPES[:Logout]
-            send_msg Protocol.logout
+            send Protocol.logout
             close
           when MESSAGE_TYPES[:TestRequest]
-            send_msg Protocol.heartbeat received.data[TAGS[:TestReqID]]?.to_s
+            send Protocol.heartbeat received.data[TAGS[:TestReqID]]?.to_s
           when MESSAGE_TYPES[:ResendRequest]
             i = received.data[TAGS[:BeginSeqNo]].as(String).to_i
             @messages.each do |k, v|
               if k >= i
                 if k > i
-                  send_msg Protocol.sequence_reset(k, true)
+                  send Protocol.sequence_reset(k, true)
                   i = k
                 end
                 v.set_field(TAGS[:PossDupFlag], "Y")
-                send_msg v
+                send v
                 i += 1
               end
             end
@@ -115,7 +115,7 @@ module FIX
         if Time.now - @last_recv > (@hb_int + 3).seconds
           if @test_id.nil?
             @test_id = Random.rand(1000...10_000).to_s
-            send_msg Protocol.test_request @test_id.not_nil!
+            send Protocol.test_request @test_id.not_nil!
             @last_recv = Time.now
           else
             close
@@ -124,7 +124,7 @@ module FIX
 
         # send heartbeats
         if Time.now - @last_sent >= (@hb_int - 1).seconds
-          send_msg Protocol.heartbeat
+          send Protocol.heartbeat
         end
         # puts "ping hbeat"
 
@@ -133,7 +133,7 @@ module FIX
     end
 
     # Returns decoded incoming Message if a valid one exists in socket buffer - non blocking
-    def recv_msg : Message?
+    def recv : Message?
       return unless @running
 
       raw = ""
@@ -180,7 +180,7 @@ module FIX
               @in_seq += 1
               return msg
             elsif msg.data[TAGS[:MsgSeqNum]].as(String).to_i > @in_seq
-              send_msg Protocol.resend_request @in_seq
+              send Protocol.resend_request @in_seq
             else
               @on_error_callback.not_nil!.call InvalidSeqNum.new if @on_error_callback
               close
@@ -194,7 +194,7 @@ module FIX
     end
 
     # Sends FIX message `msg` to connected server, set `validate` to `False` to send message as-is
-    def send_msg(msg : Message, validate = true) : Nil
+    def send(msg : Message, validate = true) : Nil
       puts msg.data
       return unless @running
 
