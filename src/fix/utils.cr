@@ -21,7 +21,7 @@ module FIX
     # ```text
     # "35=A|6=asd|7=tr|20=2|26=oo|29=gj|26=53o|29=g5j|"
     # ```
-    def encode(data : Hash(Int32, String | Array(Hash(Int32, String))))
+    def encode(data)
       data.map do |key, value|
         if value.is_a?(Array(Hash(Int32, String)))
           groups = value.map do |group|
