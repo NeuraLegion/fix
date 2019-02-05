@@ -23,7 +23,7 @@ module FIX
     # ```
     def encode(data : RawMessage) : String
       data.map do |key, value|
-        if value.is_a?(Array(Hash(Int32, String)))
+        if value.is_a?(Array(Hash(Int32 | String, String)))
           groups = value.map do |group|
             group.map do |k, v|
               "#{k}=#{v}\x01"
@@ -46,7 +46,7 @@ module FIX
     # ```
     # TODO: Add repeating groups decoding
     def decode(data : String) : Message
-      decoded = {} of Int32 => String | Array(Hash(Int32, String))
+      decoded = {} of Int32 | String => String | Array(Hash(Int32 | String, String))
       begin
         data.split("\x01")[0...-1].each do |field|
           k, v = field.split("=")

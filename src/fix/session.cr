@@ -144,7 +144,7 @@ module FIX
           if (b == 1) && (i = raw.rindex("#{TAGS[:BodyLength]}="))
             bytes = Slice(UInt8).new(raw[i + 1 + TAGS[:BodyLength].to_s.size...-1].to_i + TAGS[:CheckSum].to_s.size + 5)
             if !@client.read_fully? bytes
-              @on_error_callback.not_nil!.call DecodeException.new DecodeFailureReason::INVALID_BODYLENGTH if @on_error_callback
+              @on_error_callback.not_nil!.call(DecodeException.new(DecodeFailureReason::INVALID_BODYLENGTH)) if @on_error_callback
               return
             end
             raw += String.new(bytes)

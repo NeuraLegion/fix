@@ -2,7 +2,7 @@ module FIX
   # Represents a FIX message
   class Message
     getter msg_type
-    property data = {} of Int32 => String | Array(Hash(Int32, String))
+    property data = {} of Int32 | String => String | Array(Hash(Int32 | String, String))
 
     # Initialize a new FIX message with message type of `msg_type`
     def initialize(@msg_type : String)
