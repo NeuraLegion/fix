@@ -49,8 +49,10 @@ module FIX
     end
 
     # Initializes and connects a Session with heartbeat interval of `hb_int`
-    def initialize(host : String, port : Int32, @username = nil, @password = nil, @fix_ver = "FIX.4.4", @fixt = false, @hb_int = 30)
+    def initialize(host : String, port : Int32, @username = nil, @password = nil, @fix_ver = "FIX.4.4", @fixt = false, @hb_int = 30, timeout = 5)
       @client = TCPSocket.new host, port
+      @client.read_timeout = timeout
+      @client.write_timeout = timeout
       send Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
