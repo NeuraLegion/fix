@@ -53,6 +53,9 @@ module FIX
       @client = TCPSocket.new host, port
       @client.read_timeout = timeout
       @client.write_timeout = timeout
+    end
+
+    def send_logon
       send Protocol.logon(hb_int: @hb_int, reset_seq: true, username: @username, password: @password)
     end
 
